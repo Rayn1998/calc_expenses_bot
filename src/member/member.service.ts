@@ -1,30 +1,55 @@
+import TelegramBot from "node-telegram-bot-api";
 import { PushkaBot } from "../bot/bot.service";
-import { IMember } from "./member.interface";
-import { Pool } from "pg";
+// import { IMember } from "./member.interface";
 
 export class Members {
-    private _members: Map<number, IMember>;
-    db: Pool;
+    bot: PushkaBot;
+    private _step: number;
+    private _stateOfCreationNewMember: boolean;
 
-    constructor(db: Pool) {
-        this._members = new Map();
-        this.db = db;
-    }
-
-    get(chatId: number) {
-        return this._members.get(chatId);
+    constructor(bot: PushkaBot) {
+        this.bot = bot;
+        this._step = 1;
+        this._stateOfCreationNewMember = false;
     }
 
     async getAllFromDb() {
-        return (await this.db.query("SELECT * FROM members")).rows;
+        return (await this.bot.db.query("SELECT * FROM members")).rows;
     }
 
-    deleteMember(chatId: number) {
-        this._members.delete(chatId);
+    getMemberCreationState(): boolean {
+        return this._stateOfCreationNewMember;
     }
 
-    async createMember(bot: PushkaBot, chatId: number) {
-        this._members.set(chatId, { step: 1 });
-        await bot.sendMessage(chatId, "Введите имя участника");
+    async createMember(bot: PushkaBot, msg: TelegramBot.Message) {
+        this._stateOfCreationNewMember = true;
+        try {
+            await bot.sendMessage(msg.chat.id, "Введите имя участника");
+
+            // const member = await addMember(bot, msg);
+            // if (member) {
+            //     this._stateOfCreationNewMember = false;
+            // }
+        } catch (err) {
+            await this.bot.sendMessage(
+                msg.chat.id,
+                "Ошибка создания пользователя",
+            );
+            console.error("Error creating a member:", err);
+        }
+    }
+
+    async deleteAllMembers(chatId: number) {
+        try {
+            await this.bot.db.query("DELETE FROM members");
+            await this.bot.db.query(
+                "ALTER SEQUENCE members_member_id_seq RESTART WITH 1;",
+            );
+            await this.bot.sendMessage(chatId, "Все пользователи удалены");
+            console.log("All members deleted and ID counter restarted.");
+        } catch (err) {
+            await this.bot.sendMessage(chatId, "Ошибка удаления пользователей");
+            console.error("Error deleting all members:", err);
+        }
     }
 }

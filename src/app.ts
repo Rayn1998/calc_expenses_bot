@@ -8,7 +8,7 @@ export class App {
     }
 
     async init() {
-        await this.bot.db.connect();
+        await this.bot.connectToDb();
         await this.bot.setCommands();
         await this.bot.listen();
     }

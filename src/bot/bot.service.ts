@@ -1,7 +1,7 @@
 import TelegramBot from "node-telegram-bot-api";
-import { botKey, registeredCommands } from "../constant";
+import { botKey, dbData } from "../constant";
+import { botCommands } from "./bot.commands";
 import { Members } from "../member/member.service";
-import { addMember } from "../member/methods/addMember.method";
 import { Expenses } from "../expense/expense.service";
 import { Pool } from "pg";
 
@@ -12,15 +12,9 @@ export class PushkaBot {
     db: Pool;
 
     constructor() {
-        this.db = new Pool({
-            user: "rayn",
-            host: "localhost",
-            database: "pushkaBot",
-            password: "postgresql",
-            port: 5432,
-        });
+        this.db = new Pool(dbData);
         this.bot = new TelegramBot(botKey, { polling: true });
-        this.members = new Members(this.db);
+        this.members = new Members(this);
         this.expenses = new Expenses();
     }
 
@@ -59,9 +53,24 @@ export class PushkaBot {
                     command: "getmembers",
                     description: "получить всех участников",
                 },
+                {
+                    command: "deletemembers",
+                    description: "удалить всех участников",
+                },
             ]);
         } catch (err) {
             console.error("Ошибка при установке команд: ", err);
+        }
+    }
+
+    async connectToDb() {
+        try {
+            const connection = await this.db.connect();
+            if (connection) {
+                console.log("DataBase connection established");
+            }
+        } catch (err) {
+            console.log("Can't connect to db");
         }
     }
 
@@ -74,7 +83,7 @@ export class PushkaBot {
         });
 
         this.bot.onText(/\/addmember/, async (msg) => {
-            await this.members.createMember(this, msg.chat.id);
+            await this.members.createMember(this, msg);
         });
 
         // this.bot.onText(/\/addexpense/, async (msg) => {});
@@ -86,16 +95,20 @@ export class PushkaBot {
             await this.sendMessage(chatId, `${members}`);
         });
 
+        this.bot.onText(/\/deletemembers/, async (msg) => {
+            const chatId = msg.chat.id;
+            await this.members.deleteAllMembers(chatId);
+        });
+
         this.bot.on("message", async (msg) => {
             const text = msg.text;
-            const isNewMemberProcess = await addMember(this, msg);
+            const isNewMemberProcess = this.members.getMemberCreationState();
             // const isNewExpenseProcess = await
+            if (isNewMemberProcess) return;
 
-            if (text && registeredCommands.some((regex) => regex.test(text))) {
+            if (text && botCommands.some((regex) => regex.test(text))) {
                 return;
             }
-
-            if (isNewMemberProcess) return;
 
             await this.sendMessage(msg.chat.id, "Вы что-то написали");
         });
