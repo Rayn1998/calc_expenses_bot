@@ -1,0 +1,21 @@
+{
+    "name": "expenses_calc",
+    "version": "1.0.0",
+    "main": "main.js",
+    "scripts": {
+        "start": "node ./dist/main.js",
+        "build": "tsc"
+    },
+    "author": "Yuriy Bodolanov",
+    "license": "ISC",
+    "description": "",
+    "devDependencies": {
+        "@types/node-telegram-bot-api": "^0.64.7",
+        "@types/pg": "^8.11.10",
+        "typescript": "^5.7.2"
+    },
+    "dependencies": {
+        "node-telegram-bot-api": "^0.66.0",
+        "pg": "^8.13.1"
+    }
+}
