@@ -4,39 +4,48 @@ import { PushkaBot } from "../bot/bot.service";
 
 export class Members {
     bot: PushkaBot;
-    private _step: number;
-    private _stateOfCreationNewMember: boolean;
+    newMemberProcess: { [chatId: number]: { step: number } };
 
     constructor(bot: PushkaBot) {
         this.bot = bot;
-        this._step = 1;
-        this._stateOfCreationNewMember = false;
+        this.newMemberProcess = {};
     }
 
     async getAllFromDb() {
         return (await this.bot.db.query("SELECT * FROM members")).rows;
     }
 
-    getMemberCreationState(): boolean {
-        return this._stateOfCreationNewMember;
-    }
-
     async createMember(bot: PushkaBot, msg: TelegramBot.Message) {
-        this._stateOfCreationNewMember = true;
-        try {
-            await bot.sendMessage(msg.chat.id, "Введите имя участника");
+        const chatId = msg.chat.id;
 
-            // const member = await addMember(bot, msg);
-            // if (member) {
-            //     this._stateOfCreationNewMember = false;
-            // }
-        } catch (err) {
-            await this.bot.sendMessage(
-                msg.chat.id,
-                "Ошибка создания пользователя",
-            );
-            console.error("Error creating a member:", err);
+        if (this.newMemberProcess[chatId]) {
+            const process = this.newMemberProcess[chatId];
+
+            switch (process.step) {
+                case 1:
+                    const name = msg.text;
+                    await bot.db.query(`INSERT INTO members(name) VALUES($1)`, [
+                        name,
+                    ]);
+                    await bot.sendMessage(
+                        chatId,
+                        `Создан участник с именем ${name}`,
+                    );
+                    delete this.newMemberProcess[chatId];
+                    break;
+
+                default:
+                    await this.bot.sendMessage(
+                        msg.chat.id,
+                        "Ошибка создания пользователя",
+                    );
+                    break;
+            }
+            return;
         }
+
+        this.newMemberProcess[chatId] = { step: 1 };
+        await bot.sendMessage(msg.chat.id, "Введите имя участника");
     }
 
     async deleteAllMembers(chatId: number) {

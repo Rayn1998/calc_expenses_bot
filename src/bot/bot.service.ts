@@ -101,10 +101,13 @@ export class PushkaBot {
         });
 
         this.bot.on("message", async (msg) => {
+            const chatId = msg.chat.id;
             const text = msg.text;
-            const isNewMemberProcess = this.members.getMemberCreationState();
-            // const isNewExpenseProcess = await
-            if (isNewMemberProcess) return;
+
+            if (this.members.newMemberProcess[chatId]) {
+                await this.members.createMember(this, msg);
+                return;
+            }
 
             if (text && botCommands.some((regex) => regex.test(text))) {
                 return;
