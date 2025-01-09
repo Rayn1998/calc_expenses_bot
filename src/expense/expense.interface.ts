@@ -1,9 +1,9 @@
 export interface IExpense {
-    step: number;
-    id?: number;
-    amount?: number;
-    description?: string;
-    date?: Date;
-    whoPaid?: number;
-    whoParticipated?: string[];
+    expense_id: number;
+    amount: number;
+    description: string;
+    date: Date;
+    whoPaid: number;
+    whoParticipated: number[];
+    resolve: boolean;
 }

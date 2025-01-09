@@ -14,7 +14,7 @@ export class PushkaBot {
     constructor() {
         this.db = new Pool(dbData);
         this.bot = new TelegramBot(botKey, { polling: true });
-        this.members = new Members(this);
+        this.members = new Members();
         this.expenses = new Expenses();
     }
 
@@ -42,20 +42,24 @@ export class PushkaBot {
                     description: "Добавить участника в расходы",
                 },
                 {
+                    command: "getmembers",
+                    description: "Получить всех участников",
+                },
+                {
+                    command: "deletemembers",
+                    description: "Удалить всех участников",
+                },
+                {
                     command: "addexpense",
                     description: "Добавить новый расход",
                 },
                 {
+                    command: "deleteexpenses",
+                    description: "Удалить все расходы",
+                },
+                {
                     command: "help",
                     description: "Доступные команды",
-                },
-                {
-                    command: "getmembers",
-                    description: "получить всех участников",
-                },
-                {
-                    command: "deletemembers",
-                    description: "удалить всех участников",
                 },
             ]);
         } catch (err) {
@@ -86,18 +90,23 @@ export class PushkaBot {
             await this.members.createMember(this, msg);
         });
 
-        // this.bot.onText(/\/addexpense/, async (msg) => {});
-
         this.bot.onText(/\/getmembers/, async (msg) => {
             const chatId = msg.chat.id;
-            const members = await this.members.getAllFromDb();
+            const members = await this.members.getAllFromDb(this);
 
             await this.sendMessage(chatId, `${members}`);
         });
 
         this.bot.onText(/\/deletemembers/, async (msg) => {
-            const chatId = msg.chat.id;
-            await this.members.deleteAllMembers(chatId);
+            await this.members.deleteAllMembers(this, msg);
+        });
+
+        this.bot.onText(/\/addexpense/, async (msg) => {
+            await this.expenses.createExpense(this, msg);
+        });
+
+        this.bot.onText(/\/deleteexpenses/, async (msg) => {
+            await this.expenses.deleteAllExpenses(this, msg);
         });
 
         this.bot.on("message", async (msg) => {
@@ -106,6 +115,11 @@ export class PushkaBot {
 
             if (this.members.newMemberProcess[chatId]) {
                 await this.members.createMember(this, msg);
+                return;
+            }
+
+            if (this.expenses.newExpenseProcess[chatId]) {
+                await this.expenses.createExpense(this, msg);
                 return;
             }
 

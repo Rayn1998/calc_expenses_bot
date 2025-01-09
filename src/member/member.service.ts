@@ -1,18 +1,15 @@
 import TelegramBot from "node-telegram-bot-api";
 import { PushkaBot } from "../bot/bot.service";
-// import { IMember } from "./member.interface";
 
 export class Members {
-    bot: PushkaBot;
     newMemberProcess: { [chatId: number]: { step: number } };
 
-    constructor(bot: PushkaBot) {
-        this.bot = bot;
+    constructor() {
         this.newMemberProcess = {};
     }
 
-    async getAllFromDb() {
-        return (await this.bot.db.query("SELECT * FROM members")).rows;
+    async getAllFromDb(bot: PushkaBot) {
+        return (await bot.db.query("SELECT * FROM members")).rows;
     }
 
     async createMember(bot: PushkaBot, msg: TelegramBot.Message) {
@@ -35,7 +32,7 @@ export class Members {
                     break;
 
                 default:
-                    await this.bot.sendMessage(
+                    await bot.sendMessage(
                         msg.chat.id,
                         "Ошибка создания пользователя",
                     );
@@ -48,16 +45,17 @@ export class Members {
         await bot.sendMessage(msg.chat.id, "Введите имя участника");
     }
 
-    async deleteAllMembers(chatId: number) {
+    async deleteAllMembers(bot: PushkaBot, msg: TelegramBot.Message) {
+        const chatId = msg.chat.id;
         try {
-            await this.bot.db.query("DELETE FROM members");
-            await this.bot.db.query(
+            await bot.db.query("DELETE FROM members");
+            await bot.db.query(
                 "ALTER SEQUENCE members_member_id_seq RESTART WITH 1;",
             );
-            await this.bot.sendMessage(chatId, "Все пользователи удалены");
+            await bot.sendMessage(chatId, "Все пользователи удалены");
             console.log("All members deleted and ID counter restarted.");
         } catch (err) {
-            await this.bot.sendMessage(chatId, "Ошибка удаления пользователей");
+            await bot.sendMessage(chatId, "Ошибка удаления пользователей");
             console.error("Error deleting all members:", err);
         }
     }
