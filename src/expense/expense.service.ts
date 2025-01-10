@@ -16,7 +16,7 @@ export class Expenses {
         this.newExpenseProcess = {};
     }
 
-    async getAllFromDb(bot: PushkaBot, msg: Message) {
+    async showAllFromDb(bot: PushkaBot, msg: Message) {
         const chatId = msg.chat.id;
         const expenses: IExpense[] = (
             await bot.db.query("SELECT * FROM expenses")
@@ -27,9 +27,14 @@ export class Expenses {
         } else {
             let message = "Текущие расходы:";
             for (const expense of expenses) {
+                const expenseState = expense.resolve
+                    ? "Расчитан ✅"
+                    : "Не расчитан ⛔️";
                 message +=
                     "\n" +
-                    `- ${expense.date} ${expense.amount} ${expense.description}`;
+                    `- ${expense.description}, ${
+                        expense.amount
+                    }, ${expense.date.toDateString()}, ${expenseState}`;
             }
             await bot.sendMessage(chatId, message);
         }
@@ -117,12 +122,12 @@ export class Expenses {
                     process.step = 5;
                     await bot.db.query(
                         `INSERT INTO expenses(amount, description, date, whopaid, whoparticipated, resolve)
-                    VALUES
-                    ($1, $2, $3, $4, $5, false);`,
+                        VALUES
+                        ($1, $2, $3, $4, $5, false);`,
                         [
                             process.expense.amount,
                             process.expense.description,
-                            new Date().toISOString(),
+                            new Date().toDateString(),
                             process.expense.whoPaid,
                             process.expense.whoParticipated,
                         ],
@@ -142,6 +147,22 @@ export class Expenses {
         }
         this.newExpenseProcess[chatId] = { step: 1, expense: {} };
         await bot.sendMessage(chatId, "Введите сумму платежа");
+    }
+
+    async resolveExpense(bot: PushkaBot, msg: Message, id: number) {
+        const chatId = msg.chat.id;
+        try {
+            await bot.db.query(
+                "UPDATE expenses SET resolve = true WHERE expense_id = $1;",
+                [id],
+            );
+            await bot.sendMessage(chatId, "Расход успешно расчитан, спасибо");
+        } catch (err) {
+            await bot.sendMessage(
+                chatId,
+                "Ошибка расчёта расхода, попробуйте ещё раз",
+            );
+        }
     }
 
     async deleteAllExpenses(bot: PushkaBot, msg: Message) {

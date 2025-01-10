@@ -4,14 +4,13 @@ import { botCommands } from "./bot.commands";
 import { Members } from "../member/member.service";
 import { Expenses } from "../expense/expense.service";
 import { Pool } from "pg";
-
-// INTERFACES
-import { IMember } from "../member/member.interface";
+import { Debts } from "../debt/debt.service";
 
 export class PushkaBot {
     private bot: TelegramBot;
     members: Members;
     expenses: Expenses;
+    debts: Debts;
     db: Pool;
 
     constructor() {
@@ -19,6 +18,7 @@ export class PushkaBot {
         this.bot = new TelegramBot(botKey, { polling: true });
         this.members = new Members();
         this.expenses = new Expenses();
+        this.debts = new Debts();
     }
 
     async sendMessage(
@@ -64,6 +64,14 @@ export class PushkaBot {
                     command: "deleteexpenses",
                     description: "Удалить все расходы",
                 },
+                {
+                    command: "showdebts",
+                    description: "Получить все долги",
+                },
+                {
+                    command: "deletedebts",
+                    description: "Удалить все долги",
+                },
                 // {
                 //     command: "help",
                 //     description: "Доступные команды",
@@ -95,6 +103,8 @@ export class PushkaBot {
                 msg.chat.id,
                 "Привет, я бот, помогу с подсчётом расходов",
             );
+            // TEST
+            // await this.expenses.resolveExpense(this, msg, 1);
         });
 
         this.bot.onText(/\/addmember/, async (msg) => {
@@ -114,11 +124,19 @@ export class PushkaBot {
         });
 
         this.bot.onText(/\/showexpenses/, async (msg) => {
-            await this.expenses.getAllFromDb(this, msg);
+            await this.expenses.showAllFromDb(this, msg);
         });
 
         this.bot.onText(/\/deleteexpenses/, async (msg) => {
             await this.expenses.deleteAllExpenses(this, msg);
+        });
+
+        this.bot.onText(/\/showdebts/, async (msg) => {
+            await this.debts.showAllFromDb(this, msg);
+        });
+
+        this.bot.onText(/\/deletedebts/, async (msg) => {
+            await this.debts.deleteAllDebts(this, msg);
         });
 
         this.bot.on("message", async (msg) => {
