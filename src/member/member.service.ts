@@ -1,5 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import { PushkaBot } from "../bot/bot.service";
+import { IMember } from "./member.interface";
 
 export class Members {
     newMemberProcess: { [chatId: number]: { step: number } };
@@ -8,8 +9,35 @@ export class Members {
         this.newMemberProcess = {};
     }
 
-    async getAllFromDb(bot: PushkaBot) {
-        return (await bot.db.query("SELECT * FROM members")).rows;
+    async showAllFromDb(
+        bot: PushkaBot,
+        msg: TelegramBot.Message,
+    ): Promise<void> {
+        const chatId = msg.chat.id;
+        const members: IMember[] = (await bot.db.query("SELECT * FROM members"))
+            .rows;
+
+        if (members.length === 0) {
+            bot.sendMessage(chatId, "Пользователей пока нет");
+            return;
+        } else {
+            let message = "Текущие участники:";
+            for (const member of members) {
+                message += "\n" + `- ${member.name}`;
+            }
+            await bot.sendMessage(chatId, message);
+        }
+    }
+
+    async getAllFromDb(bot: PushkaBot): Promise<IMember[] | null> {
+        const members: IMember[] = (await bot.db.query("SELECT * FROM members"))
+            .rows;
+
+        if (members.length === 0) {
+            return null;
+        } else {
+            return members;
+        }
     }
 
     async createMember(bot: PushkaBot, msg: TelegramBot.Message) {

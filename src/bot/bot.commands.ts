@@ -1,9 +1,10 @@
 export const botCommands = [
     /\/start/,
     /\/addmember/,
-    /\/getmember/,
+    /\/showmembers/,
     /\/deletemembers/,
     /\/addexpense/,
+    /\/showexpenses/,
     /\/deleteexpenses/,
-    /\/help/,
+    // /\/help/,
 ];

@@ -1,6 +1,11 @@
-import TelegramBot from "node-telegram-bot-api";
+import {
+    Message,
+    CallbackQuery,
+    InlineKeyboardButton,
+} from "node-telegram-bot-api";
 import { IExpense } from "./expense.interface";
 import { PushkaBot } from "../bot/bot.service";
+import { isMessage, isCallbackQuery } from "../ts/typeguards";
 
 export class Expenses {
     newExpenseProcess: {
@@ -11,40 +16,109 @@ export class Expenses {
         this.newExpenseProcess = {};
     }
 
-    async createExpense(bot: PushkaBot, msg: TelegramBot.Message) {
+    async getAllFromDb(bot: PushkaBot, msg: Message) {
         const chatId = msg.chat.id;
+        const expenses: IExpense[] = (
+            await bot.db.query("SELECT * FROM expenses")
+        ).rows;
 
-        if (this.newExpenseProcess[chatId]) {
-            const process = this.newExpenseProcess[chatId];
-            const text = msg.text;
-            if (!text) return;
+        if (expenses.length === 0) {
+            bot.sendMessage(chatId, "Расходов пока нет");
+        } else {
+            let message = "Текущие расходы:";
+            for (const expense of expenses) {
+                message +=
+                    "\n" +
+                    `- ${expense.date} ${expense.amount} ${expense.description}`;
+            }
+            await bot.sendMessage(chatId, message);
+        }
+    }
+
+    async createExpense(bot: PushkaBot, msg: Message | CallbackQuery) {
+        let chatId: number = 0;
+        let inputData: string = "";
+
+        if (isMessage(msg)) {
+            chatId = msg.chat.id;
+            inputData = msg.text!;
+        } else if (isCallbackQuery(msg)) {
+            chatId = msg.message!.chat.id;
+            inputData = msg.data!;
+        }
+
+        const process = this.newExpenseProcess[chatId];
+
+        if (process) {
+            const members = await bot.members.getAllFromDb(bot);
+            if (members === null) return;
 
             switch (process.step) {
                 case 1:
-                    process.expense.amount = Number(msg.text);
+                    process.expense.amount = Number(inputData);
                     process.step = 2;
                     await bot.sendMessage(chatId, "Введите описание");
                     break;
 
                 case 2:
-                    process.expense.description = text;
+                    process.expense.description = inputData;
                     process.step = 3;
-                    await bot.sendMessage(chatId, "Кто платил?");
+
+                    const options: InlineKeyboardButton[] = members.map(
+                        (member) => ({
+                            text: member.name,
+                            callback_data: `${member.member_id}`,
+                        }),
+                    );
+                    await bot.sendMessage(chatId, "Кто платил?", {
+                        reply_markup: {
+                            inline_keyboard: [options],
+                        },
+                    });
                     break;
 
                 case 3:
-                    process.expense.whoPaid = Number(text);
+                    process.expense.whoPaid = Number(inputData);
                     process.step = 4;
-                    await bot.sendMessage(chatId, "Кто участвовал?");
+                    if (members === null) return;
+                    const participantsOptions = members
+                        .filter((m) => m.member_id !== process.expense.whoPaid)
+                        .map((member) => ({
+                            text: member.name,
+                            callback_data: `${member.member_id}`,
+                        }));
+
+                    participantsOptions.push({
+                        text: "Все",
+                        callback_data: "all",
+                    });
+                    await bot.sendMessage(chatId, "Кто участвовал?", {
+                        reply_markup: {
+                            inline_keyboard: [participantsOptions],
+                        },
+                    });
                     break;
 
                 case 4:
-                    process.expense.whoParticipated = [Number(text)];
+                    const participantsIds =
+                        inputData === "all"
+                            ? members
+                                  .filter((m) => {
+                                      return (
+                                          m.member_id !==
+                                          process.expense.whoPaid
+                                      );
+                                  })
+                                  .map((m) => {
+                                      return m.member_id;
+                                  })
+                            : [Number(inputData)];
+                    process.expense.whoParticipated = participantsIds;
                     process.step = 5;
                     await bot.db.query(
                         `INSERT INTO expenses(amount, description, date, whopaid, whoparticipated, resolve)
-                        VALUES
-                        ($1, $2, $3, $4, $5, false);`,
+                    VALUES
+                    ($1, $2, $3, $4, $5, false);`,
                         [
                             process.expense.amount,
                             process.expense.description,
@@ -61,10 +135,7 @@ export class Expenses {
                     break;
 
                 default:
-                    await bot.sendMessage(
-                        msg.chat.id,
-                        "Ошибка создания расхода",
-                    );
+                    await bot.sendMessage(chatId, "Ошибка создания расхода");
                     break;
             }
             return;
@@ -73,7 +144,7 @@ export class Expenses {
         await bot.sendMessage(chatId, "Введите сумму платежа");
     }
 
-    async deleteAllExpenses(bot: PushkaBot, msg: TelegramBot.Message) {
+    async deleteAllExpenses(bot: PushkaBot, msg: Message) {
         const chatId = msg.chat.id;
         try {
             await bot.db.query("DELETE FROM expenses");

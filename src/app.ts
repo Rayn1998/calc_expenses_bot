@@ -1,4 +1,5 @@
 import { PushkaBot } from "./bot/bot.service";
+import * as process from "process";
 
 export class App {
     private bot: PushkaBot;
@@ -8,8 +9,12 @@ export class App {
     }
 
     async init() {
-        await this.bot.connectToDb();
-        await this.bot.setCommands();
+        const dbConnection = await this.bot.connectToDb();
+        const settingCommands = await this.bot.setCommands();
+        if (!dbConnection || !settingCommands) {
+            console.error("Something doesn't work, check");
+            process.exit(1);
+        }
         await this.bot.listen();
     }
 }

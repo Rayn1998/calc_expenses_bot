@@ -1,9 +1,12 @@
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot, { CopyMessageOptions } from "node-telegram-bot-api";
 import { botKey, dbData } from "../constant";
 import { botCommands } from "./bot.commands";
 import { Members } from "../member/member.service";
 import { Expenses } from "../expense/expense.service";
 import { Pool } from "pg";
+
+// INTERFACES
+import { IMember } from "../member/member.interface";
 
 export class PushkaBot {
     private bot: TelegramBot;
@@ -21,7 +24,7 @@ export class PushkaBot {
     async sendMessage(
         chatId: number,
         message: string,
-        options?: TelegramBot.CopyMessageOptions,
+        options?: CopyMessageOptions,
     ) {
         try {
             await this.bot.sendMessage(chatId, message, options);
@@ -30,7 +33,7 @@ export class PushkaBot {
         }
     }
 
-    async setCommands() {
+    async setCommands(): Promise<boolean> {
         try {
             await this.bot.setMyCommands([
                 {
@@ -42,7 +45,7 @@ export class PushkaBot {
                     description: "Добавить участника в расходы",
                 },
                 {
-                    command: "getmembers",
+                    command: "showmembers",
                     description: "Получить всех участников",
                 },
                 {
@@ -54,27 +57,35 @@ export class PushkaBot {
                     description: "Добавить новый расход",
                 },
                 {
+                    command: "showexpenses",
+                    description: "Получить все расходы",
+                },
+                {
                     command: "deleteexpenses",
                     description: "Удалить все расходы",
                 },
-                {
-                    command: "help",
-                    description: "Доступные команды",
-                },
+                // {
+                //     command: "help",
+                //     description: "Доступные команды",
+                // },
             ]);
+            return true;
         } catch (err) {
             console.error("Ошибка при установке команд: ", err);
+            return false;
         }
     }
 
-    async connectToDb() {
+    async connectToDb(): Promise<boolean> {
         try {
             const connection = await this.db.connect();
             if (connection) {
                 console.log("DataBase connection established");
             }
+            return true;
         } catch (err) {
             console.log("Can't connect to db");
+            return false;
         }
     }
 
@@ -90,11 +101,8 @@ export class PushkaBot {
             await this.members.createMember(this, msg);
         });
 
-        this.bot.onText(/\/getmembers/, async (msg) => {
-            const chatId = msg.chat.id;
-            const members = await this.members.getAllFromDb(this);
-
-            await this.sendMessage(chatId, `${members}`);
+        this.bot.onText(/\/showmembers/, async (msg) => {
+            await this.members.showAllFromDb(this, msg);
         });
 
         this.bot.onText(/\/deletemembers/, async (msg) => {
@@ -103,6 +111,10 @@ export class PushkaBot {
 
         this.bot.onText(/\/addexpense/, async (msg) => {
             await this.expenses.createExpense(this, msg);
+        });
+
+        this.bot.onText(/\/showexpenses/, async (msg) => {
+            await this.expenses.getAllFromDb(this, msg);
         });
 
         this.bot.onText(/\/deleteexpenses/, async (msg) => {
@@ -128,6 +140,15 @@ export class PushkaBot {
             }
 
             await this.sendMessage(msg.chat.id, "Вы что-то написали");
+        });
+
+        this.bot.on("callback_query", async (query) => {
+            const chatId = query.message!.chat.id;
+            if (!chatId) return;
+            if (this.expenses.newExpenseProcess[chatId]) {
+                await this.expenses.createExpense(this, query);
+                return;
+            }
         });
     }
 }
