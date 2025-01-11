@@ -6,6 +6,7 @@ export const botCommands = [
     /\/addexpense/,
     /\/showexpenses/,
     /\/deleteexpenses/,
+    /\/adddebt/,
     /\/showdebts/,
     /\/deletedebts/,
     // /\/help/,

@@ -1,8 +1,8 @@
 export interface IDebt {
     debt_id: number;
     debt: number;
-    toWhom: number;
-    resolve: boolean;
+    towhom: number;
     whosedebt: number;
     fromexpense: number;
+    resolve: boolean;
 }

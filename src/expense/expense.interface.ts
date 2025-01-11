@@ -3,7 +3,7 @@ export interface IExpense {
     amount: number;
     description: string;
     date: Date;
-    whoPaid: number;
-    whoParticipated: number[];
+    whopaid: number;
+    whoparticipated: number[];
     resolve: boolean;
 }

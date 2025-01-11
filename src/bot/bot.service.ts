@@ -65,6 +65,10 @@ export class PushkaBot {
                     description: "Удалить все расходы",
                 },
                 {
+                    command: "adddebt",
+                    description: "Добавить новый долг",
+                },
+                {
                     command: "showdebts",
                     description: "Получить все долги",
                 },
@@ -131,6 +135,10 @@ export class PushkaBot {
             await this.expenses.deleteAllExpenses(this, msg);
         });
 
+        this.bot.onText(/\/adddebt/, async (msg) => {
+            await this.debts.createDebt(this, msg);
+        });
+
         this.bot.onText(/\/showdebts/, async (msg) => {
             await this.debts.showAllFromDb(this, msg);
         });
@@ -153,6 +161,11 @@ export class PushkaBot {
                 return;
             }
 
+            if (this.debts.newDebtProcess[chatId]) {
+                await this.debts.createDebt(this, msg);
+                return;
+            }
+
             if (text && botCommands.some((regex) => regex.test(text))) {
                 return;
             }
@@ -163,8 +176,14 @@ export class PushkaBot {
         this.bot.on("callback_query", async (query) => {
             const chatId = query.message!.chat.id;
             if (!chatId) return;
+
             if (this.expenses.newExpenseProcess[chatId]) {
                 await this.expenses.createExpense(this, query);
+                return;
+            }
+
+            if (this.debts.newDebtProcess[chatId]) {
+                await this.debts.createDebt(this, query);
                 return;
             }
         });

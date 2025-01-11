@@ -40,6 +40,23 @@ export class Expenses {
         }
     }
 
+    async getAllUnresolvedExpenses(bot: PushkaBot): Promise<IExpense[] | null> {
+        try {
+            const expenses: IExpense[] = (
+                await bot.db.query(
+                    "SELECT * FROM expenses WHERE resolve = false",
+                )
+            ).rows;
+            if (expenses.length !== 0) {
+                return expenses;
+            } else {
+                return null;
+            }
+        } catch (err) {
+            return null;
+        }
+    }
+
     async createExpense(bot: PushkaBot, msg: Message | CallbackQuery) {
         let chatId: number = 0;
         let inputData: string = "";
@@ -83,11 +100,11 @@ export class Expenses {
                     break;
 
                 case 3:
-                    process.expense.whoPaid = Number(inputData);
+                    process.expense.whopaid = Number(inputData);
                     process.step = 4;
                     if (members === null) return;
                     const participantsOptions = members
-                        .filter((m) => m.member_id !== process.expense.whoPaid)
+                        .filter((m) => m.member_id !== process.expense.whopaid)
                         .map((member) => ({
                             text: member.name,
                             callback_data: `${member.member_id}`,
@@ -111,31 +128,42 @@ export class Expenses {
                                   .filter((m) => {
                                       return (
                                           m.member_id !==
-                                          process.expense.whoPaid
+                                          process.expense.whopaid
                                       );
                                   })
                                   .map((m) => {
                                       return m.member_id;
                                   })
                             : [Number(inputData)];
-                    process.expense.whoParticipated = participantsIds;
+                    process.expense.whoparticipated = participantsIds;
                     process.step = 5;
-                    await bot.db.query(
-                        `INSERT INTO expenses(amount, description, date, whopaid, whoparticipated, resolve)
-                        VALUES
-                        ($1, $2, $3, $4, $5, false);`,
-                        [
-                            process.expense.amount,
-                            process.expense.description,
-                            new Date().toDateString(),
-                            process.expense.whoPaid,
-                            process.expense.whoParticipated,
-                        ],
-                    );
-                    await bot.sendMessage(
-                        chatId,
-                        "Расход успешно добавлен, спасибо",
-                    );
+
+                    try {
+                        await bot.db.query(
+                            `INSERT INTO expenses(amount, description, date, whopaid, whoparticipated, resolve)
+                            VALUES
+                            ($1, $2, $3, $4, $5, false);`,
+                            [
+                                process.expense.amount,
+                                process.expense.description,
+                                new Date().toDateString(),
+                                process.expense.whopaid,
+                                process.expense.whoparticipated,
+                            ],
+                        );
+
+                        await bot.sendMessage(
+                            chatId,
+                            "Расход успешно добавлен, спасибо",
+                        );
+                    } catch (err) {
+                        await bot.sendMessage(
+                            chatId,
+                            "Ошибка создания расхода d БД",
+                        );
+                        return;
+                    }
+
                     delete this.newExpenseProcess[chatId];
                     break;
 
@@ -149,8 +177,7 @@ export class Expenses {
         await bot.sendMessage(chatId, "Введите сумму платежа");
     }
 
-    async resolveExpense(bot: PushkaBot, msg: Message, id: number) {
-        const chatId = msg.chat.id;
+    async resolveExpense(bot: PushkaBot, chatId: number, id: number) {
         try {
             await bot.db.query(
                 "UPDATE expenses SET resolve = true WHERE expense_id = $1;",
