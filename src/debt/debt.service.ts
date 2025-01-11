@@ -10,7 +10,7 @@ import { isMessage, isCallbackQuery } from "../ts/typeguards";
 
 interface INewDebtProcess {
     step: number;
-    debt: Partial<IDebt>;
+    amount: number;
     debtorsIds: number[];
     debtorsIdsForDB?: number[];
     towhom?: number;
@@ -21,9 +21,11 @@ interface INewDebtProcess {
 
 export class Debts {
     newDebtProcess: { [chatId: number]: INewDebtProcess };
+    deleteDebtProcess: boolean;
 
     constructor() {
         this.newDebtProcess = {};
+        this.deleteDebtProcess = false;
     }
 
     async showAllFromDb(bot: PushkaBot, msg: Message) {
@@ -69,6 +71,74 @@ export class Debts {
         }
     }
 
+    async calcdebts(bot: PushkaBot, msg: Message): Promise<void> {
+        const chatId = msg.chat.id;
+
+        try {
+            const debts: IDebt[] = (await bot.db.query("SELECT * FROM debts"))
+                .rows;
+
+            const members: IMember[] = (
+                await bot.db.query("SELECT * FROM members")
+            ).rows;
+
+            if (debts.length === 0) {
+                await bot.sendMessage(chatId, "Нет долгов для расчета.");
+                return;
+            }
+
+            const debtMap: { [key: number]: { [key: number]: number } } = {};
+
+            for (const debt of debts) {
+                const { debt: amount, towhom, whosedebt, resolve } = debt;
+
+                if (!debtMap[whosedebt]) debtMap[whosedebt] = {};
+                if (!debtMap[whosedebt][towhom]) debtMap[whosedebt][towhom] = 0;
+
+                if (!resolve) {
+                    debtMap[whosedebt][towhom] += amount;
+                }
+            }
+
+            let message = "Текущие долги между участниками:\n";
+
+            for (const debtorId in debtMap) {
+                for (const creditorId in debtMap[debtorId]) {
+                    const amountOwed = debtMap[debtorId][creditorId];
+                    if (amountOwed > 0) {
+                        const debtorName = members.find(
+                            (member) => member.member_id === +debtorId,
+                        )?.name;
+                        const creditorName = members.find(
+                            (member) => member.member_id === +creditorId,
+                        )?.name;
+
+                        message += `- ${debtorName} должен ${creditorName} ${amountOwed}\n`;
+                    } else {
+                        message = "Долгов нет!";
+                    }
+                }
+            }
+
+            await bot.sendMessage(chatId, message);
+        } catch (err) {
+            console.error("Ошибка расчета долгов:", err);
+        }
+    }
+
+    async solveAllDebts(bot: PushkaBot, msg: Message) {
+        const chatId = msg.chat.id;
+
+        try {
+            await bot.db.query("UPDATE debts SET resolve = true;");
+            await bot.sendMessage(chatId, "Все долги анулированы");
+            return;
+        } catch (err) {
+            await bot.sendMessage(chatId, "Ошибка анулирования долгов");
+            return;
+        }
+    }
+
     async createDebt(bot: PushkaBot, msg: Message | CallbackQuery) {
         let chatId = 0;
         let inputData = "";
@@ -79,6 +149,26 @@ export class Debts {
         } else if (isCallbackQuery(msg)) {
             chatId = msg.message!.chat.id;
             inputData = msg.data!;
+        }
+
+        if (bot.checkInSomeProcess() && bot.checkAddCommands(inputData)) {
+            await bot.sendMessage(
+                chatId,
+                "Вы начали, но не завершили процесс создания или добавления. Пожалуйста, завершите его или отмените",
+                {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                {
+                                    text: "Отмена",
+                                    callback_data: "cancel",
+                                },
+                            ],
+                        ],
+                    },
+                },
+            );
+            return;
         }
 
         const expenses = await bot.expenses.getAllUnresolvedExpenses(bot);
@@ -115,6 +205,7 @@ export class Debts {
                         return;
                     }
 
+                    process.amount = selectedExpense.amount;
                     process.expenseId = selectedExpense.expense_id;
                     process.towhom = selectedExpense.whopaid;
                     process.debtorsIds = [...selectedExpense.whoparticipated];
@@ -132,6 +223,14 @@ export class Debts {
                         await bot.sendMessage(
                             chatId,
                             "Введите корректную сумму",
+                        );
+                        return;
+                    }
+
+                    if (amount > process.amount) {
+                        await bot.sendMessage(
+                            chatId,
+                            "Долг не может быть больше расхода, повторите ввод, пожалуйста",
                         );
                         return;
                     }
@@ -157,6 +256,7 @@ export class Debts {
                             process.expenseId!,
                         );
                         delete this.newDebtProcess[chatId];
+                        bot.setInSomeProcess(false);
                     }
                     break;
 
@@ -170,9 +270,10 @@ export class Debts {
             return;
         }
 
+        bot.setInSomeProcess(true);
         this.newDebtProcess[chatId] = {
             step: 1,
-            debt: {},
+            amount: 0,
             debtorsIds: [],
             debtsAmounts: [],
         };
@@ -182,12 +283,17 @@ export class Debts {
             callback_data: `${expense.expense_id}`,
         }));
 
+        options.push({
+            text: "Отмена",
+            callback_data: "cancel",
+        });
+
         await bot.sendMessage(
             chatId,
             "Выберите, какой расход сейчас посчитаем:",
             {
                 reply_markup: {
-                    inline_keyboard: [options],
+                    inline_keyboard: [...options.map((button) => [button])],
                 },
             },
         );
@@ -231,6 +337,72 @@ export class Debts {
                 [debt.debt, debt.towhom, debt.whosedebt, debt.fromexpense],
             );
         }
+    }
+
+    async deleteOneDebt(bot: PushkaBot, msg: Message | CallbackQuery) {
+        let chatId = 0;
+        let inputData = "";
+
+        if (isMessage(msg)) {
+            chatId = msg.chat.id;
+            inputData = msg.text!;
+        } else if (isCallbackQuery(msg)) {
+            chatId = msg.message!.chat.id;
+            inputData = msg.data!;
+        }
+
+        const process = this.deleteDebtProcess;
+
+        const debts: IDebt[] = (await bot.db.query("SELECT * FROM debts;"))
+            .rows;
+        const members: IMember[] = (await bot.db.query("SELECT * FROM members"))
+            .rows;
+
+        if (process) {
+            switch (process) {
+                case true:
+                    const debt_id = +inputData;
+                    if (debt_id && typeof debt_id === "number") {
+                        await bot.db.query(
+                            "DELETE FROM debts WHERE debt_id = $1",
+                            [debt_id],
+                        );
+                        await bot.sendMessage(chatId, "Долг успешно удалён");
+                    }
+
+                    this.deleteDebtProcess = false;
+                    bot.setInSomeProcess(false);
+                    break;
+                default:
+                    await bot.sendMessage(
+                        chatId,
+                        "Ошибка удаления долга, попробуйте ещё раз",
+                    );
+
+                    this.deleteDebtProcess = false;
+                    bot.setInSomeProcess(false);
+                    break;
+            }
+            return;
+        }
+
+        this.deleteDebtProcess = true;
+        bot.setInSomeProcess(true);
+        const options: InlineKeyboardButton[] = debts.map((debt) => ({
+            text: `Долг ${debt.debt} ${
+                members.find((member) => member.member_id === debt.whosedebt)
+                    ?.name
+            } для ${
+                members.find((member) => member.member_id === debt.towhom)?.name
+            }`,
+            callback_data: `${debt.debt_id}`,
+        }));
+
+        await bot.sendMessage(chatId, "Выберите какой долг удалить:", {
+            reply_markup: {
+                inline_keyboard: [...options.map((button) => [button])],
+            },
+        });
     }
 
     async deleteAllDebts(bot: PushkaBot, msg: Message) {

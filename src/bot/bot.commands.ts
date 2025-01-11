@@ -1,13 +1,15 @@
 export const botCommands = [
     /\/start/,
-    /\/addmember/,
-    /\/showmembers/,
+    /\/showmemberslist/,
+    /\/showexpenseslist/,
+    /\/showdebtlist/,
+    /\/calcdebts/,
     /\/deletemembers/,
-    /\/addexpense/,
-    /\/showexpenses/,
     /\/deleteexpenses/,
-    /\/adddebt/,
-    /\/showdebts/,
+    /\/deleteoneexpense/,
+    /\/deleteonedebt/,
     /\/deletedebts/,
-    // /\/help/,
+    /\/solvealldebts/,
 ];
+
+export const botAddCommands = [/\/addmember/, /\/addexpense/, /\/adddebt/];

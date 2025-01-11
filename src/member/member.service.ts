@@ -1,6 +1,7 @@
 import TelegramBot from "node-telegram-bot-api";
 import { PushkaBot } from "../bot/bot.service";
 import { IMember } from "./member.interface";
+import { botAddCommands } from "../bot/bot.commands";
 
 export class Members {
     newMemberProcess: { [chatId: number]: { step: number } };
@@ -43,6 +44,26 @@ export class Members {
     async createMember(bot: PushkaBot, msg: TelegramBot.Message) {
         const chatId = msg.chat.id;
 
+        if (bot.checkInSomeProcess() && bot.checkAddCommands(msg.text!)) {
+            await bot.sendMessage(
+                chatId,
+                "Вы начали, но не завершили процесс создания или добавления. Пожалуйста, завершите его или отмените",
+                {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                {
+                                    text: "Отменить",
+                                    callback_data: "cancel",
+                                },
+                            ],
+                        ],
+                    },
+                },
+            );
+            return;
+        }
+
         if (this.newMemberProcess[chatId]) {
             const process = this.newMemberProcess[chatId];
 
@@ -57,6 +78,7 @@ export class Members {
                         `Создан участник с именем ${name}`,
                     );
                     delete this.newMemberProcess[chatId];
+                    bot.setInSomeProcess(false);
                     break;
 
                 default:
@@ -69,8 +91,20 @@ export class Members {
             return;
         }
 
+        bot.setInSomeProcess(true);
         this.newMemberProcess[chatId] = { step: 1 };
-        await bot.sendMessage(msg.chat.id, "Введите имя участника");
+        await bot.sendMessage(msg.chat.id, "Введите имя участника", {
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        {
+                            text: "Отмена",
+                            callback_data: "cancel",
+                        },
+                    ],
+                ],
+            },
+        });
     }
 
     async deleteAllMembers(bot: PushkaBot, msg: TelegramBot.Message) {

@@ -11,9 +11,11 @@ export class Expenses {
     newExpenseProcess: {
         [chatId: number]: { step: number; expense: Partial<IExpense> };
     };
+    deleteExpenseProcess: boolean;
 
     constructor() {
         this.newExpenseProcess = {};
+        this.deleteExpenseProcess = false;
     }
 
     async showAllFromDb(bot: PushkaBot, msg: Message) {
@@ -58,8 +60,8 @@ export class Expenses {
     }
 
     async createExpense(bot: PushkaBot, msg: Message | CallbackQuery) {
-        let chatId: number = 0;
-        let inputData: string = "";
+        let chatId = 0;
+        let inputData = "";
 
         if (isMessage(msg)) {
             chatId = msg.chat.id;
@@ -69,16 +71,45 @@ export class Expenses {
             inputData = msg.data!;
         }
 
+        if (bot.checkInSomeProcess() && bot.checkAddCommands(inputData)) {
+            await bot.sendMessage(
+                chatId,
+                "Вы начали, но не завершили процесс создания или добавления. Пожалуйста, завершите его или отмените",
+                {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                {
+                                    text: "Отмена",
+                                    callback_data: "cancel",
+                                },
+                            ],
+                        ],
+                    },
+                },
+            );
+            return;
+        }
+
         const process = this.newExpenseProcess[chatId];
 
         if (process) {
             const members = await bot.members.getAllFromDb(bot);
-            if (members === null) return;
+            if (!members) return;
 
             switch (process.step) {
                 case 1:
+                    if (Number.isNaN(Number(inputData))) {
+                        await bot.sendMessage(
+                            chatId,
+                            "Пожалуйста, введите число",
+                        );
+                        return;
+                    }
+
                     process.expense.amount = Number(inputData);
                     process.step = 2;
+
                     await bot.sendMessage(chatId, "Введите описание");
                     break;
 
@@ -165,16 +196,116 @@ export class Expenses {
                     }
 
                     delete this.newExpenseProcess[chatId];
+                    bot.setInSomeProcess(false);
                     break;
 
                 default:
                     await bot.sendMessage(chatId, "Ошибка создания расхода");
+                    delete this.newExpenseProcess[chatId];
+                    bot.setInSomeProcess(false);
                     break;
             }
             return;
         }
+
+        bot.setInSomeProcess(true);
         this.newExpenseProcess[chatId] = { step: 1, expense: {} };
-        await bot.sendMessage(chatId, "Введите сумму платежа");
+        await bot.sendMessage(chatId, "Введите сумму платежа", {
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        {
+                            text: "Отмена",
+                            callback_data: "cancel",
+                        },
+                    ],
+                ],
+            },
+        });
+    }
+
+    async deleteOneExpense(bot: PushkaBot, msg: Message | CallbackQuery) {
+        let chatId = 0;
+        let inputData = "";
+
+        if (isMessage(msg)) {
+            chatId = msg.chat.id;
+            inputData = msg.text!;
+        } else if (isCallbackQuery(msg)) {
+            chatId = msg.message!.chat.id;
+            inputData = msg.data!;
+        }
+
+        if (bot.checkInSomeProcess() && bot.checkAddCommands(inputData)) {
+            await bot.sendMessage(
+                chatId,
+                "Вы начали, но не завершили процесс создания или добавления. Пожалуйста, завершите его или отмените",
+                {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                {
+                                    text: "Отмена",
+                                    callback_data: "cancel",
+                                },
+                            ],
+                        ],
+                    },
+                },
+            );
+            return;
+        }
+
+        const process = this.deleteExpenseProcess;
+
+        const expenses = (await bot.db.query("SELECT * FROM expenses;")).rows;
+
+        if (process) {
+            switch (process) {
+                case true:
+                    const expenseId = +inputData;
+                    if (expenseId && typeof expenseId === "number") {
+                        await bot.db.query(
+                            "DELETE FROM expenses WHERE expense_id = $1",
+                            [expenseId],
+                        );
+                        await bot.sendMessage(chatId, "Расход успешно удалён");
+                    }
+
+                    this.deleteExpenseProcess = false;
+                    bot.setInSomeProcess(false);
+                    break;
+
+                default:
+                    await bot.sendMessage(
+                        chatId,
+                        "Ошибка удаления расхода, попробуйте ещё раз",
+                    );
+
+                    this.deleteExpenseProcess = false;
+                    bot.setInSomeProcess(false);
+                    break;
+            }
+            return;
+        }
+
+        bot.setInSomeProcess(true);
+        this.deleteExpenseProcess = true;
+        const options: InlineKeyboardButton[] = expenses!.map((expense) => ({
+            text: `${expense.amount} в ${expense.description}`,
+            callback_data: `${expense.expense_id}`,
+        }));
+
+        options.push({
+            text: "Отмена",
+            callback_data: "cancel",
+        });
+
+        await bot.sendMessage(chatId, "Выберите, какой расход удалить:", {
+            reply_markup: {
+                inline_keyboard: [...options.map((button) => [button])],
+            },
+        });
     }
 
     async resolveExpense(bot: PushkaBot, chatId: number, id: number) {
