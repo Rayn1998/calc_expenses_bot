@@ -1,4 +1,5 @@
 import TelegramBot, {
+    CallbackQuery,
     CopyMessageOptions,
     Message,
 } from "node-telegram-bot-api";
@@ -8,10 +9,11 @@ import { Members } from "../member/member.service";
 import { Expenses } from "../expense/expense.service";
 import { Pool } from "pg";
 import { Debts } from "../debt/debt.service";
+import { isCallbackQuery, isMessage } from "../ts/typeguards";
 
 export class PushkaBot {
+    process: boolean;
     private bot: TelegramBot;
-    private inSomeProcess: boolean;
     members: Members;
     expenses: Expenses;
     debts: Debts;
@@ -23,14 +25,49 @@ export class PushkaBot {
         this.members = new Members();
         this.expenses = new Expenses();
         this.debts = new Debts();
-        this.inSomeProcess = false;
+        this.process = false;
     }
 
-    checkInSomeProcess(): boolean {
-        if (this.inSomeProcess) {
+    async checkInSomeProcess(msg: Message | CallbackQuery): Promise<boolean> {
+        const { chatId, inputData } = this.getChatIdAndInputData(msg);
+        if (this.process && this.checkAddCommands(inputData)) {
+            await this.sendMessage(
+                chatId,
+                "Вы начали, но не завершили процесс создания или добавления. Пожалуйста, завершите его или отмените",
+                {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                {
+                                    text: "Отменить",
+                                    callback_data: "cancel",
+                                },
+                            ],
+                        ],
+                    },
+                },
+            );
             return true;
         }
         return false;
+    }
+
+    getChatIdAndInputData(msg: Message | CallbackQuery): {
+        chatId: number;
+        inputData: string;
+    } {
+        let chatId = 0;
+        let inputData = "";
+
+        if (isMessage(msg)) {
+            chatId = msg.chat.id;
+            inputData = msg.text!;
+        } else if (isCallbackQuery(msg)) {
+            chatId = msg.message!.chat.id;
+            inputData = msg.data!;
+        }
+
+        return { chatId, inputData };
     }
 
     checkCommands(text: string): boolean {
@@ -49,17 +86,10 @@ export class PushkaBot {
         }
     }
 
-    setInSomeProcess(state: boolean) {
-        this.inSomeProcess = state;
-    }
-
     async cancelAllStarted(chatId: number) {
-        delete this.members.newMemberProcess[chatId];
-        delete this.expenses.newExpenseProcess[chatId];
-        this.expenses.deleteExpenseProcess = false;
-        delete this.debts.newDebtProcess[chatId];
-        this.debts.deleteDebtProcess = false;
-        this.inSomeProcess = false;
+        this.members.deleteStates(this);
+        this.expenses.deleteStates(this, chatId);
+        this.debts.deleteStates(this, chatId);
 
         await this.sendMessage(chatId, "Отмена");
     }
@@ -118,6 +148,10 @@ export class PushkaBot {
                 {
                     command: "deleteexpenses",
                     description: "Удалить все расходы",
+                },
+                {
+                    command: "deleteonemember",
+                    description: "Удалить 1го участника",
                 },
                 {
                     command: "deleteoneexpense",
@@ -192,6 +226,10 @@ export class PushkaBot {
             await this.debts.showAllFromDb(this, msg);
         });
 
+        this.bot.onText(/\/deleteonemember/, async (msg) => {
+            await this.members.deleteOneMember(this, msg);
+        });
+
         this.bot.onText(/\/deleteoneexpense/, async (msg) => {
             await this.expenses.deleteOneExpense(this, msg);
         });
@@ -217,15 +255,17 @@ export class PushkaBot {
         });
 
         this.bot.on("message", async (msg) => {
-            const chatId = msg.chat.id;
-            const text = msg.text;
+            const { chatId, inputData } = this.getChatIdAndInputData(msg);
 
-            if (this.checkAddCommands(text!) || this.checkCommands(text!)) {
+            if (
+                this.checkAddCommands(inputData) ||
+                this.checkCommands(inputData)
+            ) {
                 return;
             }
 
-            if (this.checkInSomeProcess()) {
-                if (this.members.newMemberProcess[chatId]) {
+            if (this.process) {
+                if (this.members.newMemberProcess) {
                     await this.members.createMember(this, msg);
                     return;
                 }
@@ -240,39 +280,43 @@ export class PushkaBot {
                     return;
                 }
             }
-
-            // await this.sendMessage(msg.chat.id, "Вы что-то написали");
         });
 
         this.bot.on("callback_query", async (query) => {
-            const chatId = query.message!.chat.id;
-            const data = query.data;
+            const { chatId, inputData } = this.getChatIdAndInputData(query);
 
-            if (!chatId || !data) return;
+            if (!chatId || !inputData) return;
 
-            if (data === "cancel") {
+            if (inputData === "cancel") {
                 await this.cancelAllStarted(chatId);
                 return;
             }
 
-            if (this.expenses.newExpenseProcess[chatId]) {
-                await this.expenses.createExpense(this, query);
-                return;
-            }
+            if (this.process) {
+                if (this.members.deleteMemberProcess) {
+                    await this.members.deleteOneMember(this, query);
+                    return;
+                }
 
-            if (this.expenses.deleteExpenseProcess) {
-                await this.expenses.deleteOneExpense(this, query);
-                return;
-            }
+                if (this.expenses.newExpenseProcess[chatId]) {
+                    await this.expenses.createExpense(this, query);
+                    return;
+                }
 
-            if (this.debts.newDebtProcess[chatId]) {
-                await this.debts.createDebt(this, query);
-                return;
-            }
+                if (this.expenses.deleteExpenseProcess) {
+                    await this.expenses.deleteOneExpense(this, query);
+                    return;
+                }
 
-            if (this.debts.deleteDebtProcess) {
-                await this.debts.deleteOneDebt(this, query);
-                return;
+                if (this.debts.newDebtProcess[chatId]) {
+                    await this.debts.createDebt(this, query);
+                    return;
+                }
+
+                if (this.debts.deleteDebtProcess) {
+                    await this.debts.deleteOneDebt(this, query);
+                    return;
+                }
             }
         });
     }

@@ -29,7 +29,7 @@ export class Debts {
     }
 
     async showAllFromDb(bot: PushkaBot, msg: Message) {
-        const chatId = msg.chat.id;
+        const { chatId } = bot.getChatIdAndInputData(msg);
 
         try {
             let members: IMember[] = [];
@@ -46,6 +46,7 @@ export class Debts {
 
             const debts: IDebt[] = (await bot.db.query("SELECT * FROM debts"))
                 .rows;
+
             if (debts.length === 0) {
                 bot.sendMessage(chatId, "Долгов пока нет");
             } else {
@@ -54,12 +55,15 @@ export class Debts {
                     const debtState = debt.resolve
                         ? "Погашен ✅"
                         : "Не погашен ⛔️";
+
                     const whoseDebt = members.find(
                         (m) => m.member_id === debt.whosedebt,
                     )?.name;
+
                     const toWhom = members.find(
                         (m) => m.member_id === debt.towhom,
                     )?.name;
+
                     message +=
                         "\n" +
                         `- ${whoseDebt} должен ${toWhom} ${debt.debt}, статус: ${debtState}`;
@@ -72,7 +76,7 @@ export class Debts {
     }
 
     async calcdebts(bot: PushkaBot, msg: Message): Promise<void> {
-        const chatId = msg.chat.id;
+        const { chatId } = bot.getChatIdAndInputData(msg);
 
         try {
             const debts: IDebt[] = (await bot.db.query("SELECT * FROM debts"))
@@ -123,11 +127,12 @@ export class Debts {
             await bot.sendMessage(chatId, message);
         } catch (err) {
             console.error("Ошибка расчета долгов:", err);
+            await bot.sendMessage(chatId, "Ошибка расчета долгов");
         }
     }
 
     async solveAllDebts(bot: PushkaBot, msg: Message) {
-        const chatId = msg.chat.id;
+        const { chatId } = bot.getChatIdAndInputData(msg);
 
         try {
             await bot.db.query("UPDATE debts SET resolve = true;");
@@ -140,36 +145,11 @@ export class Debts {
     }
 
     async createDebt(bot: PushkaBot, msg: Message | CallbackQuery) {
-        let chatId = 0;
-        let inputData = "";
+        const { chatId, inputData } = bot.getChatIdAndInputData(msg);
 
-        if (isMessage(msg)) {
-            chatId = msg.chat.id;
-            inputData = msg.text!;
-        } else if (isCallbackQuery(msg)) {
-            chatId = msg.message!.chat.id;
-            inputData = msg.data!;
-        }
+        const process = this.newDebtProcess[chatId];
 
-        if (bot.checkInSomeProcess() && bot.checkAddCommands(inputData)) {
-            await bot.sendMessage(
-                chatId,
-                "Вы начали, но не завершили процесс создания или добавления. Пожалуйста, завершите его или отмените",
-                {
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                {
-                                    text: "Отмена",
-                                    callback_data: "cancel",
-                                },
-                            ],
-                        ],
-                    },
-                },
-            );
-            return;
-        }
+        await bot.checkInSomeProcess(msg);
 
         const expenses = await bot.expenses.getAllUnresolvedExpenses(bot);
         const debtors = await bot.members.getAllFromDb(bot);
@@ -186,8 +166,6 @@ export class Debts {
             await bot.sendMessage(chatId, "Нет участников для расчета долгов.");
             return;
         }
-
-        const process = this.newDebtProcess[chatId];
 
         if (process) {
             switch (process.step) {
@@ -255,8 +233,7 @@ export class Debts {
                             chatId,
                             process.expenseId!,
                         );
-                        delete this.newDebtProcess[chatId];
-                        bot.setInSomeProcess(false);
+                        this.deleteStates(bot, chatId);
                     }
                     break;
 
@@ -265,18 +242,19 @@ export class Debts {
                         chatId,
                         "Произошла ошибка составления долга, попробуйте ещё раз",
                     );
+                    this.deleteStates(bot, chatId);
                     break;
             }
             return;
         }
 
-        bot.setInSomeProcess(true);
         this.newDebtProcess[chatId] = {
             step: 1,
             amount: 0,
             debtorsIds: [],
             debtsAmounts: [],
         };
+        bot.process = true;
 
         const options: InlineKeyboardButton[] = expenses!.map((expense) => ({
             text: `${expense.amount} в ${expense.description}`,
@@ -340,21 +318,22 @@ export class Debts {
     }
 
     async deleteOneDebt(bot: PushkaBot, msg: Message | CallbackQuery) {
-        let chatId = 0;
-        let inputData = "";
-
-        if (isMessage(msg)) {
-            chatId = msg.chat.id;
-            inputData = msg.text!;
-        } else if (isCallbackQuery(msg)) {
-            chatId = msg.message!.chat.id;
-            inputData = msg.data!;
-        }
+        const { chatId, inputData } = bot.getChatIdAndInputData(msg);
 
         const process = this.deleteDebtProcess;
 
+        if (await bot.checkInSomeProcess(msg)) {
+            return;
+        }
+
         const debts: IDebt[] = (await bot.db.query("SELECT * FROM debts;"))
             .rows;
+
+        if (debts.length === 0) {
+            await bot.sendMessage(chatId, "Нечего удалять");
+            return;
+        }
+
         const members: IMember[] = (await bot.db.query("SELECT * FROM members"))
             .rows;
 
@@ -370,8 +349,7 @@ export class Debts {
                         await bot.sendMessage(chatId, "Долг успешно удалён");
                     }
 
-                    this.deleteDebtProcess = false;
-                    bot.setInSomeProcess(false);
+                    this.deleteStates(bot, chatId);
                     break;
                 default:
                     await bot.sendMessage(
@@ -379,15 +357,15 @@ export class Debts {
                         "Ошибка удаления долга, попробуйте ещё раз",
                     );
 
-                    this.deleteDebtProcess = false;
-                    bot.setInSomeProcess(false);
+                    this.deleteStates(bot, chatId);
                     break;
             }
             return;
         }
 
         this.deleteDebtProcess = true;
-        bot.setInSomeProcess(true);
+        bot.process = false;
+
         const options: InlineKeyboardButton[] = debts.map((debt) => ({
             text: `Долг ${debt.debt} ${
                 members.find((member) => member.member_id === debt.whosedebt)
@@ -406,7 +384,7 @@ export class Debts {
     }
 
     async deleteAllDebts(bot: PushkaBot, msg: Message) {
-        const chatId = msg.chat.id;
+        const { chatId } = bot.getChatIdAndInputData(msg);
         try {
             await bot.db.query("DELETE FROM debts");
             await bot.db.query(
@@ -416,5 +394,11 @@ export class Debts {
         } catch (err) {
             await bot.sendMessage(chatId, "Ошибка удаления долгов");
         }
+    }
+
+    deleteStates(bot: PushkaBot, chatId: number) {
+        this.deleteDebtProcess = false;
+        delete this.newDebtProcess[chatId];
+        bot.process = false;
     }
 }
