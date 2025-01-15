@@ -1,8 +1,4 @@
-import TelegramBot, {
-    CallbackQuery,
-    CopyMessageOptions,
-    Message,
-} from "node-telegram-bot-api";
+import TelegramBot, { CallbackQuery, CopyMessageOptions, Message } from "node-telegram-bot-api";
 import { botKey, dbData } from "../constant";
 import { botAddCommands, botCommands } from "./bot.commands";
 import { Members } from "../member/member.service";
@@ -10,7 +6,13 @@ import { Expenses } from "../expense/expense.service";
 import { Pool } from "pg";
 import { Debts } from "../debt/debt.service";
 import { isCallbackQuery, isMessage } from "../ts/typeguards";
+import { createClient } from "redis";
 
+const redisClient = createClient();
+
+/**
+ * @class Класс бота для произведения расчётов
+ */
 export class PushkaBot {
     process: boolean;
     private bot: TelegramBot;
@@ -28,30 +30,36 @@ export class PushkaBot {
         this.process = false;
     }
 
+    /**
+     * Функция проверяет: находится ли бот уже в состоянии какого-то процесса: создания участника или расхода или долга, а также состояние удаления конкретного пользователя, расхода или долга
+     * @param msg {Message | CallbackQuery} сообщение или query из бота
+     * @returns {Promise<boolean>} Возвращает булевое значение
+     */
     async checkInSomeProcess(msg: Message | CallbackQuery): Promise<boolean> {
         const { chatId, inputData } = this.getChatIdAndInputData(msg);
         if (this.process && this.checkAddCommands(inputData)) {
-            await this.sendMessage(
-                chatId,
-                "Вы начали, но не завершили процесс создания или добавления. Пожалуйста, завершите его или отмените",
-                {
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                {
-                                    text: "Отменить",
-                                    callback_data: "cancel",
-                                },
-                            ],
+            await this.sendMessage(chatId, "Вы начали, но не завершили процесс создания или добавления. Пожалуйста, завершите его или отмените", {
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            {
+                                text: "Отменить",
+                                callback_data: "cancel",
+                            },
                         ],
-                    },
+                    ],
                 },
-            );
+            });
             return true;
         }
         return false;
     }
 
+    /**
+     * Функция позволяет получить id чата и пришедшее значени в виде текста или callback_data из query
+     * @param msg {Meesage | CallbackQuery}
+     * @returns \{ chatId: number, inputData: string }
+     */
     getChatIdAndInputData(msg: Message | CallbackQuery): {
         chatId: number;
         inputData: string;
@@ -70,6 +78,11 @@ export class PushkaBot {
         return { chatId, inputData };
     }
 
+    /**
+     * Функция проверяет, является ли полученный текст командой из списка доступных команд в bot.commands.ts
+     * @param {string} text
+     * @returns {boolean} boolean
+     */
     checkCommands(text: string): boolean {
         if (botCommands.some((regex) => regex.test(text))) {
             return true;
@@ -78,6 +91,11 @@ export class PushkaBot {
         }
     }
 
+    /**
+     * Функция проверяет, является ли полученный текст командой из списка доступных команд в bot.commands.ts
+     * @param {string} text
+     * @returns {boolean} boolean
+     */
     checkAddCommands(text: string): boolean {
         if (botAddCommands.some((regex) => regex.test(text))) {
             return true;
@@ -94,11 +112,7 @@ export class PushkaBot {
         await this.sendMessage(chatId, "Отмена");
     }
 
-    async sendMessage(
-        chatId: number,
-        message: string,
-        options?: CopyMessageOptions,
-    ) {
+    async sendMessage(chatId: number, message: string, options?: CopyMessageOptions) {
         try {
             await this.bot.sendMessage(chatId, message, options);
         } catch (err) {
@@ -192,10 +206,7 @@ export class PushkaBot {
 
     async listen() {
         this.bot.onText(/\/start/, async (msg) => {
-            await this.sendMessage(
-                msg.chat.id,
-                "Привет, я бот, помогу с подсчётом расходов",
-            );
+            await this.sendMessage(msg.chat.id, "Привет, я бот, помогу с подсчётом расходов");
         });
 
         this.bot.onText(/\/addmember/, async (msg) => {
@@ -257,10 +268,7 @@ export class PushkaBot {
         this.bot.on("message", async (msg) => {
             const { chatId, inputData } = this.getChatIdAndInputData(msg);
 
-            if (
-                this.checkAddCommands(inputData) ||
-                this.checkCommands(inputData)
-            ) {
+            if (this.checkAddCommands(inputData) || this.checkCommands(inputData)) {
                 return;
             }
 

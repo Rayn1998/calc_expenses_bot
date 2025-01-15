@@ -12,10 +12,12 @@
     "devDependencies": {
         "@types/node-telegram-bot-api": "^0.64.7",
         "@types/pg": "^8.11.10",
+        "typedoc": "^0.27.6",
         "typescript": "^5.7.2"
     },
     "dependencies": {
         "node-telegram-bot-api": "^0.66.0",
-        "pg": "^8.13.1"
+        "pg": "^8.13.1",
+        "redis": "^4.7.0"
     }
 }

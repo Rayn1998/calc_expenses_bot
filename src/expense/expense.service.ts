@@ -1,8 +1,4 @@
-import {
-    Message,
-    CallbackQuery,
-    InlineKeyboardButton,
-} from "node-telegram-bot-api";
+import { Message, CallbackQuery, InlineKeyboardButton } from "node-telegram-bot-api";
 import { IExpense } from "./expense.interface";
 import { PushkaBot } from "../bot/bot.service";
 
@@ -20,23 +16,15 @@ export class Expenses {
     async showAllFromDb(bot: PushkaBot, msg: Message) {
         const { chatId } = bot.getChatIdAndInputData(msg);
 
-        const expenses: IExpense[] = (
-            await bot.db.query("SELECT * FROM expenses")
-        ).rows;
+        const expenses: IExpense[] = (await bot.db.query("SELECT * FROM expenses")).rows;
 
         if (expenses.length === 0) {
             await bot.sendMessage(chatId, "Расходов пока нет");
         } else {
             let message = "Текущие расходы:";
             for (const expense of expenses) {
-                const expenseState = expense.resolve
-                    ? "Расчитан ✅"
-                    : "Не расчитан ⛔️";
-                message +=
-                    "\n" +
-                    `- ${expense.description}, ${
-                        expense.amount
-                    }, ${expense.date.toDateString()}, ${expenseState}`;
+                const expenseState = expense.resolve ? "Расчитан ✅" : "Не расчитан ⛔️";
+                message += "\n" + `- ${expense.description}, ${expense.amount}, ${expense.date.toDateString()}, ${expenseState}`;
             }
             await bot.sendMessage(chatId, message);
         }
@@ -44,11 +32,7 @@ export class Expenses {
 
     async getAllUnresolvedExpenses(bot: PushkaBot): Promise<IExpense[] | null> {
         try {
-            const expenses: IExpense[] = (
-                await bot.db.query(
-                    "SELECT * FROM expenses WHERE resolve = false",
-                )
-            ).rows;
+            const expenses: IExpense[] = (await bot.db.query("SELECT * FROM expenses WHERE resolve = false")).rows;
             if (expenses.length !== 0) {
                 return expenses;
             } else {
@@ -75,10 +59,7 @@ export class Expenses {
             switch (process.step) {
                 case 1:
                     if (Number.isNaN(Number(inputData))) {
-                        await bot.sendMessage(
-                            chatId,
-                            "Пожалуйста, введите число",
-                        );
+                        await bot.sendMessage(chatId, "Пожалуйста, введите число");
                         return;
                     }
 
@@ -92,12 +73,10 @@ export class Expenses {
                     process.expense.description = inputData;
                     process.step = 3;
 
-                    const options: InlineKeyboardButton[] = members.map(
-                        (member) => ({
-                            text: member.name,
-                            callback_data: `${member.member_id}`,
-                        }),
-                    );
+                    const options: InlineKeyboardButton[] = members.map((member) => ({
+                        text: member.name,
+                        callback_data: `${member.member_id}`,
+                    }));
                     await bot.sendMessage(chatId, "Кто платил?", {
                         reply_markup: {
                             inline_keyboard: [options],
@@ -109,7 +88,7 @@ export class Expenses {
                     process.expense.whopaid = Number(inputData);
                     process.step = 4;
                     if (members === null) return;
-                    const participantsOptions = members
+                    const participantsOptions: InlineKeyboardButton[] = members
                         .filter((m) => m.member_id !== process.expense.whopaid)
                         .map((member) => ({
                             text: member.name,
@@ -120,6 +99,7 @@ export class Expenses {
                         text: "Все",
                         callback_data: "all",
                     });
+
                     await bot.sendMessage(chatId, "Кто участвовал?", {
                         reply_markup: {
                             inline_keyboard: [participantsOptions],
@@ -132,10 +112,7 @@ export class Expenses {
                         inputData === "all"
                             ? members
                                   .filter((m) => {
-                                      return (
-                                          m.member_id !==
-                                          process.expense.whopaid
-                                      );
+                                      return m.member_id !== process.expense.whopaid;
                                   })
                                   .map((m) => {
                                       return m.member_id;
@@ -145,29 +122,79 @@ export class Expenses {
                     process.expense.whoparticipated = participantsIds;
                     process.step = 5;
 
+                    await bot.sendMessage(chatId, "Сколько оставили на чай?", {
+                        reply_markup: {
+                            inline_keyboard: [
+                                [
+                                    {
+                                        text: "Не оставляли",
+                                        callback_data: "no_tips",
+                                    },
+                                ],
+                            ],
+                        },
+                    });
+                    break;
+
+                case 5:
+                    // обработать вариант, если не оставляли на чай. Сделать слушатель callback_query для этого варианта
+                    const tip = Number(inputData);
+                    if (tip && typeof tip === "number") {
+                        process.expense.tip = tip;
+                    } else {
+                        await bot.sendMessage(chatId, "Пожалуйста, введите число");
+                        return;
+                    }
+
+                    process.step = 6;
+
+                    const whoLeftTheTipOptions: InlineKeyboardButton[] = members.map((m) => ({
+                        text: m.name,
+                        callback_data: `${m.member_id}`,
+                    }));
+
+                    await bot.sendMessage(chatId, "Кто оставил на чай?", {
+                        reply_markup: {
+                            inline_keyboard: [whoLeftTheTipOptions],
+                        },
+                    });
+                    break;
+
+                case 6:
+                    const tipParticipantId = Number(inputData);
+                    let tipParticipant;
+                    if (tipParticipantId && typeof tipParticipantId === "number") {
+                        process.expense.whoPaidTheTip = tipParticipant;
+                    } else {
+                        await bot.sendMessage(chatId, "Пожалуйста, введите число");
+                        return;
+                    }
+
+                    process.step = 7;
+
+                    await bot.sendMessage(chatId, "Какой процент за обслуживание");
+                    break;
+
+                case 7:
+                    const requiredTipPercentage = Number(inputData);
+                    if (requiredTipPercentage && typeof requiredTipPercentage === "number") {
+                        process.expense.requiredTipPercentage = requiredTipPercentage;
+                    } else {
+                        await bot.sendMessage(chatId, "Пожалуйста, введите число");
+                        return;
+                    }
+
                     try {
                         await bot.db.query(
-                            `INSERT INTO expenses(amount, description, date, whopaid, whoparticipated, resolve)
+                            `INSERT INTO expenses(amount, description, date, whopaid, whoparticipated, resolve, )
                             VALUES
                             ($1, $2, $3, $4, $5, false);`,
-                            [
-                                process.expense.amount,
-                                process.expense.description,
-                                new Date().toDateString(),
-                                process.expense.whopaid,
-                                process.expense.whoparticipated,
-                            ],
+                            [process.expense.amount, process.expense.description, new Date().toDateString(), process.expense.whopaid, process.expense.whoparticipated],
                         );
 
-                        await bot.sendMessage(
-                            chatId,
-                            "Расход успешно добавлен, спасибо",
-                        );
+                        await bot.sendMessage(chatId, "Расход успешно добавлен, спасибо");
                     } catch (err) {
-                        await bot.sendMessage(
-                            chatId,
-                            "Ошибка создания расхода d БД",
-                        );
+                        await bot.sendMessage(chatId, "Ошибка создания расхода d БД");
                         return;
                     }
 
@@ -220,10 +247,7 @@ export class Expenses {
                 case true:
                     const expenseId = +inputData;
                     if (expenseId && typeof expenseId === "number") {
-                        await bot.db.query(
-                            "DELETE FROM expenses WHERE expense_id = $1",
-                            [expenseId],
-                        );
+                        await bot.db.query("DELETE FROM expenses WHERE expense_id = $1", [expenseId]);
                         await bot.sendMessage(chatId, "Расход успешно удалён");
                     }
 
@@ -231,10 +255,7 @@ export class Expenses {
                     break;
 
                 default:
-                    await bot.sendMessage(
-                        chatId,
-                        "Ошибка удаления расхода, попробуйте ещё раз",
-                    );
+                    await bot.sendMessage(chatId, "Ошибка удаления расхода, попробуйте ещё раз");
 
                     this.deleteStates(bot, chatId);
                     break;
@@ -264,16 +285,10 @@ export class Expenses {
 
     async resolveExpense(bot: PushkaBot, chatId: number, id: number) {
         try {
-            await bot.db.query(
-                "UPDATE expenses SET resolve = true WHERE expense_id = $1;",
-                [id],
-            );
+            await bot.db.query("UPDATE expenses SET resolve = true WHERE expense_id = $1;", [id]);
             await bot.sendMessage(chatId, "Расход успешно расчитан, спасибо");
         } catch (err) {
-            await bot.sendMessage(
-                chatId,
-                "Ошибка расчёта расхода, попробуйте ещё раз",
-            );
+            await bot.sendMessage(chatId, "Ошибка расчёта расхода, попробуйте ещё раз");
         }
     }
 
@@ -281,15 +296,10 @@ export class Expenses {
         const chatId = msg.chat.id;
         try {
             await bot.db.query("DELETE FROM expenses");
-            await bot.db.query(
-                "ALTER SEQUENCE expenses_expense_id_seq RESTART WITH 1;",
-            );
+            await bot.db.query("ALTER SEQUENCE expenses_expense_id_seq RESTART WITH 1;");
             await bot.sendMessage(chatId, "Все расходы удалены");
         } catch (err) {
-            await bot.sendMessage(
-                chatId,
-                "Ошибка удаления расходов, попробуйте ещё раз",
-            );
+            await bot.sendMessage(chatId, "Ошибка удаления расходов, попробуйте ещё раз");
         }
     }
 
