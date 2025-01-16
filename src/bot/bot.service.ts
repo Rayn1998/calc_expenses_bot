@@ -1,33 +1,53 @@
 import TelegramBot, { CallbackQuery, CopyMessageOptions, Message } from "node-telegram-bot-api";
-import { botKey, dbData } from "../constant";
+import IBot from "./bot.interface";
 import { botAddCommands, botCommands } from "./bot.commands";
-import { Members } from "../member/member.service";
-import { Expenses } from "../expense/expense.service";
+import Members from "../member/member.service";
+import Expenses from "../expense/expense.service";
 import { Pool } from "pg";
-import { Debts } from "../debt/debt.service";
+import Debts from "../debt/debt.service";
 import { isCallbackQuery, isMessage } from "../ts/typeguards";
-import { createClient } from "redis";
-
-const redisClient = createClient();
 
 /**
  * @class Класс бота для произведения расчётов
  */
-export class PushkaBot {
+export default class PushkaBot implements IBot {
     process: boolean;
-    private bot: TelegramBot;
+    bot: TelegramBot;
     members: Members;
     expenses: Expenses;
     debts: Debts;
     db: Pool;
 
-    constructor() {
-        this.db = new Pool(dbData);
-        this.bot = new TelegramBot(botKey, { polling: true });
-        this.members = new Members();
-        this.expenses = new Expenses();
-        this.debts = new Debts();
+    constructor(
+        botInstance: TelegramBot,
+        dbInstance: Pool,
+        membersService: Members,
+        expensesService: Expenses,
+        debtService: Debts,
+    ) {
+        this.db = dbInstance;
+        this.bot = botInstance;
+        this.members = membersService;
+        this.expenses = expensesService;
+        this.debts = debtService;
         this.process = false;
+    }
+
+    /**
+     * Функция, запускающая бота
+     */
+    async init() {
+        const dbConnection = await this.connectToDb();
+        const settingCommands = await this.setCommands();
+        if (!dbConnection || !settingCommands) {
+            console.error("Something doesn't work, check");
+            process.exit(1);
+        }
+        await this.listen();
+    }
+
+    async stopPolling() {
+        await this.bot.stopPolling();
     }
 
     /**
@@ -38,25 +58,29 @@ export class PushkaBot {
     async checkInSomeProcess(msg: Message | CallbackQuery): Promise<boolean> {
         const { chatId, inputData } = this.getChatIdAndInputData(msg);
         if (this.process && this.checkAddCommands(inputData)) {
-            await this.sendMessage(chatId, "Вы начали, но не завершили процесс создания или добавления. Пожалуйста, завершите его или отмените", {
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            {
-                                text: "Отменить",
-                                callback_data: "cancel",
-                            },
+            await this.sendMessage(
+                chatId,
+                "Вы начали, но не завершили процесс создания или добавления. Пожалуйста, завершите его или отмените",
+                {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                {
+                                    text: "Отменить",
+                                    callback_data: "cancel",
+                                },
+                            ],
                         ],
-                    ],
+                    },
                 },
-            });
+            );
             return true;
         }
         return false;
     }
 
     /**
-     * Функция позволяет получить id чата и пришедшее значени в виде текста или callback_data из query
+     * Функция позволяет получить id чата и пришедшее значение в виде текста или callback_data из query
      * @param msg {Meesage | CallbackQuery}
      * @returns \{ chatId: number, inputData: string }
      */
@@ -104,6 +128,10 @@ export class PushkaBot {
         }
     }
 
+    /**
+     * Функция отменяет состояние всех начатых процессов
+     * @param {number} chatId
+     */
     async cancelAllStarted(chatId: number) {
         this.members.deleteStates(this);
         this.expenses.deleteStates(this, chatId);
@@ -112,6 +140,12 @@ export class PushkaBot {
         await this.sendMessage(chatId, "Отмена");
     }
 
+    /**
+     * Функция позволяет отправлять сообщения в чат
+     * @param {number} chatId
+     * @param {string} message
+     * @param {CopyMessageOptions} options
+     */
     async sendMessage(chatId: number, message: string, options?: CopyMessageOptions) {
         try {
             await this.bot.sendMessage(chatId, message, options);
@@ -120,70 +154,80 @@ export class PushkaBot {
         }
     }
 
+    /**
+     * Функция устанавливает команды меню для бота
+     */
     async setCommands(): Promise<boolean> {
         try {
-            await this.bot.setMyCommands([
+            await this.bot.setMyCommands(
+                [
+                    {
+                        command: "start",
+                        description: "Приветствие бота",
+                    },
+                    {
+                        command: "addmember",
+                        description: "Добавить участника в расходы",
+                    },
+                    {
+                        command: "addexpense",
+                        description: "Добавить новый расход",
+                    },
+                    {
+                        command: "adddebt",
+                        description: "Добавить новый долг",
+                    },
+                    {
+                        command: "showmemberslist",
+                        description: "Получить списко всех участников",
+                    },
+                    {
+                        command: "showexpenseslist",
+                        description: "Получить список всех расходов",
+                    },
+                    {
+                        command: "showdebtlist",
+                        description: "Получить список всех долгов",
+                    },
+                    {
+                        command: "calcdebts",
+                        description: "Расчитать все долги",
+                    },
+                    {
+                        command: "deletemembers",
+                        description: "Удалить всех участников",
+                    },
+                    {
+                        command: "deleteexpenses",
+                        description: "Удалить все расходы",
+                    },
+                    {
+                        command: "deletedebts",
+                        description: "Удалить все долги",
+                    },
+                    {
+                        command: "deleteonemember",
+                        description: "Удалить 1го участника",
+                    },
+                    {
+                        command: "deleteoneexpense",
+                        description: "Удалить 1 расход",
+                    },
+                    {
+                        command: "deleteonedebt",
+                        description: "Удалить 1 долг",
+                    },
+                    {
+                        command: "solvealldebts",
+                        description: "Зачесть все долги",
+                    },
+                ],
                 {
-                    command: "start",
-                    description: "Приветствие бота",
+                    scope: {
+                        type: "all_group_chats",
+                    },
                 },
-                {
-                    command: "addmember",
-                    description: "Добавить участника в расходы",
-                },
-                {
-                    command: "addexpense",
-                    description: "Добавить новый расход",
-                },
-                {
-                    command: "adddebt",
-                    description: "Добавить новый долг",
-                },
-                {
-                    command: "showmemberslist",
-                    description: "Получить списко всех участников",
-                },
-                {
-                    command: "showexpenseslist",
-                    description: "Получить список всех расходов",
-                },
-                {
-                    command: "showdebtlist",
-                    description: "Получить список всех долгов",
-                },
-                {
-                    command: "calcdebts",
-                    description: "Расчитать все долги",
-                },
-                {
-                    command: "deletemembers",
-                    description: "Удалить всех участников",
-                },
-                {
-                    command: "deleteexpenses",
-                    description: "Удалить все расходы",
-                },
-                {
-                    command: "deleteonemember",
-                    description: "Удалить 1го участника",
-                },
-                {
-                    command: "deleteoneexpense",
-                    description: "Удалить 1 расход",
-                },
-                {
-                    command: "deleteonedebt",
-                    description: "Удалить 1 долг",
-                },
-                {
-                    command: "deletedebts",
-                    description: "Удалить все долги",
-                },
-                {
-                    command: "solvealldebts",
-                    description: "Зачесть все долги",
-                },
-            ]);
+            );
             return true;
         } catch (err) {
             console.error("Ошибка при установке команд: ", err);
@@ -204,6 +248,9 @@ export class PushkaBot {
         }
     }
 
+    /**
+     * Функция включает "слушатель" бота для всех команд, сообщение и query
+     */
     async listen() {
         this.bot.onText(/\/start/, async (msg) => {
             await this.sendMessage(msg.chat.id, "Привет, я бот, помогу с подсчётом расходов");

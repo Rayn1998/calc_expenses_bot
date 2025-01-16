@@ -1,12 +1,8 @@
-import {
-    CallbackQuery,
-    InlineKeyboardButton,
-    Message,
-} from "node-telegram-bot-api";
-import { PushkaBot } from "../bot/bot.service";
-import { IMember } from "./member.interface";
+import { CallbackQuery, InlineKeyboardButton, Message } from "node-telegram-bot-api";
+import PushkaBot from "../bot/bot.service";
+import IMember from "./member.interface";
 
-export class Members {
+export default class Members {
     newMemberProcess: boolean;
     deleteMemberProcess: boolean;
 
@@ -15,10 +11,14 @@ export class Members {
         this.deleteMemberProcess = false;
     }
 
+    /**
+     * Функция выводит в чат всех участников одним общим списком
+     * @param bot
+     * @param msg
+     */
     async showAllFromDb(bot: PushkaBot, msg: Message): Promise<void> {
         const chatId = msg.chat.id;
-        const members: IMember[] = (await bot.db.query("SELECT * FROM members"))
-            .rows;
+        const members: IMember[] = (await bot.db.query("SELECT * FROM members")).rows;
 
         if (members.length === 0) {
             bot.sendMessage(chatId, "Пользователей пока нет");
@@ -32,9 +32,13 @@ export class Members {
         }
     }
 
+    /**
+     * Функция выводит объект всех участников из базы данных
+     * @param bot
+     * @returns
+     */
     async getAllFromDb(bot: PushkaBot): Promise<IMember[] | null> {
-        const members: IMember[] = (await bot.db.query("SELECT * FROM members"))
-            .rows;
+        const members: IMember[] = (await bot.db.query("SELECT * FROM members")).rows;
 
         if (members.length === 0) {
             return null;
@@ -43,6 +47,12 @@ export class Members {
         }
     }
 
+    /**
+     * Функция позволяет создать нового пользователя, задавая вопросы пользователю в чате
+     * @param bot
+     * @param msg
+     * @returns
+     */
     async createMember(bot: PushkaBot, msg: Message) {
         const { chatId, inputData } = bot.getChatIdAndInputData(msg);
         const process = this.newMemberProcess;
@@ -55,22 +65,14 @@ export class Members {
             switch (process) {
                 case true:
                     const name = msg.text;
-                    await bot.db.query(`INSERT INTO members(name) VALUES($1)`, [
-                        name,
-                    ]);
-                    await bot.sendMessage(
-                        chatId,
-                        `Создан участник с именем ${name}`,
-                    );
+                    await bot.db.query(`INSERT INTO members(name) VALUES($1)`, [name]);
+                    await bot.sendMessage(chatId, `Создан участник с именем ${name}`);
 
                     this.deleteStates(bot);
                     break;
 
                 default:
-                    await bot.sendMessage(
-                        msg.chat.id,
-                        "Ошибка создания пользователя",
-                    );
+                    await bot.sendMessage(msg.chat.id, "Ошибка создания пользователя");
                     this.deleteStates(bot);
                     break;
             }
@@ -94,6 +96,12 @@ export class Members {
         });
     }
 
+    /**
+     * Функция позволяет удалить 1го конкретного пользователя, выбирает пользователь из списка в чате
+     * @param bot
+     * @param msg
+     * @returns
+     */
     async deleteOneMember(bot: PushkaBot, msg: Message | CallbackQuery) {
         const { chatId, inputData } = bot.getChatIdAndInputData(msg);
 
@@ -103,8 +111,7 @@ export class Members {
             return;
         }
 
-        const members: IMember[] = (await bot.db.query("SELECT * FROM members"))
-            .rows;
+        const members: IMember[] = (await bot.db.query("SELECT * FROM members")).rows;
 
         if (members.length === 0) {
             await bot.sendMessage(chatId, "Некого удалять");
@@ -116,24 +123,15 @@ export class Members {
                 case true:
                     const memberId = +inputData;
                     if (memberId && typeof memberId === "number") {
-                        await bot.db.query(
-                            "DELETE FROM member WHERE expense_id = $1",
-                            [memberId],
-                        );
-                        await bot.sendMessage(
-                            chatId,
-                            "Участник успешно удалён",
-                        );
+                        await bot.db.query("DELETE FROM member WHERE expense_id = $1", [memberId]);
+                        await bot.sendMessage(chatId, "Участник успешно удалён");
                     }
 
                     this.deleteStates(bot);
                     break;
 
                 default:
-                    await bot.sendMessage(
-                        chatId,
-                        "Ошибка удаления участника, попробуйте ещё раз",
-                    );
+                    await bot.sendMessage(chatId, "Ошибка удаления участника, попробуйте ещё раз");
 
                     this.deleteStates(bot);
                     break;
@@ -161,13 +159,16 @@ export class Members {
         });
     }
 
+    /**
+     * Функция удаляет всех участников из базы данных
+     * @param bot
+     * @param msg
+     */
     async deleteAllMembers(bot: PushkaBot, msg: Message) {
         const chatId = msg.chat.id;
         try {
             await bot.db.query("DELETE FROM members");
-            await bot.db.query(
-                "ALTER SEQUENCE members_member_id_seq RESTART WITH 1;",
-            );
+            await bot.db.query("ALTER SEQUENCE members_member_id_seq RESTART WITH 1;");
             await bot.sendMessage(chatId, "Все пользователи удалены");
             console.log("All members deleted and ID counter restarted.");
         } catch (err) {
@@ -176,6 +177,11 @@ export class Members {
         }
     }
 
+    /**
+     * Функция обнуляет все статусы процессов создания или удаления пользователя
+     * @param bot
+     * @param chatId
+     */
     deleteStates(bot: PushkaBot) {
         this.newMemberProcess = false;
         this.deleteMemberProcess = false;

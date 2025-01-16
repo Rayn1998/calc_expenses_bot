@@ -1,20 +1,24 @@
-import { PushkaBot } from "./bot/bot.service";
+import TelegramBot from "node-telegram-bot-api";
+import { Pool } from "pg";
+import PushkaBot from "./bot/bot.service";
 import * as process from "process";
+import { botKey, dbData } from "./constant";
+import Members from "./member/member.service";
+import Expenses from "./expense/expense.service";
+import Debts from "./debt/debt.service";
 
-export class App {
-    private bot: PushkaBot;
+const telegramBot = new TelegramBot(botKey, { polling: true });
+const dataBasePool = new Pool(dbData);
+const membersService = new Members();
+const expensesService = new Expenses();
+const debtsService = new Debts();
 
-    constructor() {
-        this.bot = new PushkaBot();
-    }
+const pushkaBot = new PushkaBot(
+    telegramBot,
+    dataBasePool,
+    membersService,
+    expensesService,
+    debtsService,
+);
 
-    async init() {
-        const dbConnection = await this.bot.connectToDb();
-        const settingCommands = await this.bot.setCommands();
-        if (!dbConnection || !settingCommands) {
-            console.error("Something doesn't work, check");
-            process.exit(1);
-        }
-        await this.bot.listen();
-    }
-}
+export default pushkaBot;

@@ -1,5 +1,3 @@
-import { App } from "./app";
+import pushkaBot from "./app";
 
-const app = new App();
-
-app.init();
+pushkaBot.init();

@@ -1,8 +1,7 @@
 import { CallbackQuery, InlineKeyboardButton, Message } from "node-telegram-bot-api";
-import { PushkaBot } from "../bot/bot.service";
-import { IDebt } from "./debt.interface";
-import { IMember } from "../member/member.interface";
-import { isMessage, isCallbackQuery } from "../ts/typeguards";
+import PushkaBot from "../bot/bot.service";
+import IDebt from "./debt.interface";
+import IMember from "../member/member.interface";
 
 interface INewDebtProcess {
     step: number;
@@ -17,7 +16,7 @@ interface INewDebtProcess {
     requiredtippercentage?: number | null;
 }
 
-export class Debts {
+export default class Debts {
     newDebtProcess: { [chatId: number]: INewDebtProcess };
     deleteDebtProcess: boolean;
 
@@ -26,6 +25,11 @@ export class Debts {
         this.deleteDebtProcess = false;
     }
 
+    /**
+     * Функция выводит в чат все долги одним общим списком
+     * @param bot
+     * @param msg
+     */
     async showAllFromDb(bot: PushkaBot, msg: Message) {
         const { chatId } = bot.getChatIdAndInputData(msg);
 
@@ -53,7 +57,8 @@ export class Debts {
 
                     const toWhom = members.find((m) => m.member_id === debt.towhom)?.name;
 
-                    message += "\n" + `- ${whoseDebt} должен ${toWhom} ${debt.debt}, статус: ${debtState}`;
+                    message +=
+                        "\n" + `- ${whoseDebt} должен ${toWhom} ${debt.debt}, статус: ${debtState}`;
                 }
                 await bot.sendMessage(chatId, message);
             }
@@ -62,6 +67,12 @@ export class Debts {
         }
     }
 
+    /**
+     * Функция выводит в чат все долги, посчитанные для каждого участника отдельно
+     * @param bot
+     * @param msg
+     * @returns
+     */
     async calcdebts(bot: PushkaBot, msg: Message): Promise<void> {
         const { chatId } = bot.getChatIdAndInputData(msg);
 
@@ -94,8 +105,12 @@ export class Debts {
                 for (const creditorId in debtMap[debtorId]) {
                     const amountOwed = debtMap[debtorId][creditorId];
                     if (amountOwed > 0) {
-                        const debtorName = members.find((member) => member.member_id === +debtorId)?.name;
-                        const creditorName = members.find((member) => member.member_id === +creditorId)?.name;
+                        const debtorName = members.find(
+                            (member) => member.member_id === +debtorId,
+                        )?.name;
+                        const creditorName = members.find(
+                            (member) => member.member_id === +creditorId,
+                        )?.name;
 
                         message += `- ${debtorName} должен ${creditorName} ${amountOwed}\n`;
                     } else {
@@ -111,6 +126,12 @@ export class Debts {
         }
     }
 
+    /**
+     * Функция ставит всем долгам статус "расчитан"
+     * @param bot
+     * @param msg
+     * @returns
+     */
     async solveAllDebts(bot: PushkaBot, msg: Message) {
         const { chatId } = bot.getChatIdAndInputData(msg);
 
@@ -124,6 +145,12 @@ export class Debts {
         }
     }
 
+    /**
+     * Функция позволяет создать новый долг, задавая вопросы пользователю в чате
+     * @param bot
+     * @param msg
+     * @returns
+     */
     async createDebt(bot: PushkaBot, msg: Message | CallbackQuery) {
         const { chatId, inputData } = bot.getChatIdAndInputData(msg);
 
@@ -148,7 +175,9 @@ export class Debts {
             switch (process.step) {
                 case 1:
                     const expenseId = Number(inputData);
-                    const selectedExpense = expenses.find((expense) => expense.expense_id === expenseId)!;
+                    const selectedExpense = expenses.find(
+                        (expense) => expense.expense_id === expenseId,
+                    )!;
 
                     if (!selectedExpense) {
                         await bot.sendMessage(chatId, "Выбранный расход не найден.");
@@ -176,7 +205,10 @@ export class Debts {
                     }
 
                     if (amount > process.amount) {
-                        await bot.sendMessage(chatId, "Долг не может быть больше расхода, повторите ввод, пожалуйста");
+                        await bot.sendMessage(
+                            chatId,
+                            "Долг не может быть больше расхода, повторите ввод, пожалуйста",
+                        );
                         return;
                     }
 
@@ -188,7 +220,9 @@ export class Debts {
                     }
 
                     if (process.tip !== null) {
-                        const tipPart = Math.round(process.tip! / (process.debtorsIdsForDB!.length + 1));
+                        const tipPart = Math.round(
+                            process.tip! / (process.debtorsIdsForDB!.length + 1),
+                        );
                         actualDebt += tipPart;
                     }
 
@@ -205,7 +239,10 @@ export class Debts {
                     break;
 
                 default:
-                    await bot.sendMessage(chatId, "Произошла ошибка составления долга, попробуйте ещё раз");
+                    await bot.sendMessage(
+                        chatId,
+                        "Произошла ошибка составления долга, попробуйте ещё раз",
+                    );
                     this.deleteStates(bot, chatId);
                     break;
             }
@@ -237,7 +274,19 @@ export class Debts {
         });
     }
 
-    private async promptNextDebtor(bot: PushkaBot, charId: number, process: INewDebtProcess, debtors: IMember[]) {
+    /**
+     * Функция спрашивает потраченную сумму, каждым участником, участвовавшим в расходе
+     * @param bot
+     * @param charId
+     * @param process
+     * @param debtors
+     */
+    private async promptNextDebtor(
+        bot: PushkaBot,
+        charId: number,
+        process: INewDebtProcess,
+        debtors: IMember[],
+    ) {
         const currentDebtorId = process.debtorsIds.pop();
         process.currentDebtor = debtors.find((debtor) => debtor.member_id === currentDebtorId);
 
@@ -246,6 +295,11 @@ export class Debts {
         }
     }
 
+    /**
+     * Функция сохраняет переданные в объекте process долги в базе данных
+     * @param bot
+     * @param process
+     */
     private async saveDebts(bot: PushkaBot, process: INewDebtProcess) {
         for (let i = 0; i < process.debtorsIdsForDB!.length; i++) {
             const debtAmount = process.debtsAmounts!.pop()!;
@@ -267,6 +321,12 @@ export class Debts {
         }
     }
 
+    /**
+     * Функция позволяет удалить 1 конкретный долг, выбирает пользователь из списка в чате
+     * @param bot
+     * @param msg
+     * @returns
+     */
     async deleteOneDebt(bot: PushkaBot, msg: Message | CallbackQuery) {
         const { chatId, inputData } = bot.getChatIdAndInputData(msg);
 
@@ -320,6 +380,11 @@ export class Debts {
         });
     }
 
+    /**
+     * Функция удаляет все долги из базы данных
+     * @param bot
+     * @param msg
+     */
     async deleteAllDebts(bot: PushkaBot, msg: Message) {
         const { chatId } = bot.getChatIdAndInputData(msg);
         try {
@@ -331,6 +396,11 @@ export class Debts {
         }
     }
 
+    /**
+     * Функция обнуляет все статусы процессов создания или удаления долга
+     * @param bot
+     * @param chatId
+     */
     deleteStates(bot: PushkaBot, chatId: number) {
         this.deleteDebtProcess = false;
         delete this.newDebtProcess[chatId];

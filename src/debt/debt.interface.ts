@@ -1,4 +1,4 @@
-export interface IDebt {
+export default interface IDebt {
     debt_id: number;
     debt: number;
     towhom: number;

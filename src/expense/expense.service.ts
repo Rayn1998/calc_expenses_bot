@@ -1,8 +1,8 @@
 import { Message, CallbackQuery, InlineKeyboardButton } from "node-telegram-bot-api";
-import { IExpense } from "./expense.interface";
-import { PushkaBot } from "../bot/bot.service";
+import IExpense from "./expense.interface";
+import PushkaBot from "../bot/bot.service";
 
-export class Expenses {
+export default class Expenses {
     newExpenseProcess: {
         [chatId: number]: { step: number; expense: Partial<IExpense> };
     };
@@ -13,6 +13,11 @@ export class Expenses {
         this.deleteExpenseProcess = false;
     }
 
+    /**
+     * Функция выводит в чат все расходы одним общим списком
+     * @param bot
+     * @param msg
+     */
     async showAllFromDb(bot: PushkaBot, msg: Message) {
         const { chatId } = bot.getChatIdAndInputData(msg);
 
@@ -24,15 +29,24 @@ export class Expenses {
             let message = "Текущие расходы:";
             for (const expense of expenses) {
                 const expenseState = expense.resolve ? "Расчитан ✅" : "Не расчитан ⛔️";
-                message += "\n" + `- ${expense.description}, ${expense.amount}, ${expense.date.toDateString()}, ${expenseState}`;
+                message +=
+                    "\n" +
+                    `- ${expense.description}, ${expense.amount}, ${expense.date.toDateString()}, ${expenseState}`;
             }
             await bot.sendMessage(chatId, message);
         }
     }
 
+    /**
+     * Функция выводит объект всех нерасчитанных расходов из базы данных
+     * @param bot
+     * @returns
+     */
     async getAllUnresolvedExpenses(bot: PushkaBot): Promise<IExpense[] | null> {
         try {
-            const expenses: IExpense[] = (await bot.db.query("SELECT * FROM expenses WHERE resolve = false")).rows;
+            const expenses: IExpense[] = (
+                await bot.db.query("SELECT * FROM expenses WHERE resolve = false")
+            ).rows;
             if (expenses.length !== 0) {
                 return expenses;
             } else {
@@ -43,6 +57,12 @@ export class Expenses {
         }
     }
 
+    /**
+     * Функция позволяет создать новый расход, задавая вопросы пользователю в чате
+     * @param bot
+     * @param msg
+     * @returns
+     */
     async createExpense(bot: PushkaBot, msg: Message | CallbackQuery) {
         const { chatId, inputData } = bot.getChatIdAndInputData(msg);
 
@@ -157,7 +177,10 @@ export class Expenses {
 
                 case 6:
                     const requiredTipPercentage = Number(inputData);
-                    if (requiredTipPercentage + 1 > 0 && typeof requiredTipPercentage === "number") {
+                    if (
+                        requiredTipPercentage + 1 > 0 &&
+                        typeof requiredTipPercentage === "number"
+                    ) {
                         process.expense.requiredtippercentage = requiredTipPercentage;
                     } else {
                         await bot.sendMessage(chatId, "Пожалуйста, введите число");
@@ -169,7 +192,15 @@ export class Expenses {
                             `INSERT INTO expenses(amount, description, date, whopaid, whoparticipated, resolve, tip, requiredtippercentage)
                             VALUES
                             ($1, $2, $3, $4, $5, false, $6, $7);`,
-                            [process.expense.amount, process.expense.description, new Date().toDateString(), process.expense.whopaid, process.expense.whoparticipated, process.expense.tip, process.expense.requiredtippercentage],
+                            [
+                                process.expense.amount,
+                                process.expense.description,
+                                new Date().toDateString(),
+                                process.expense.whopaid,
+                                process.expense.whoparticipated,
+                                process.expense.tip,
+                                process.expense.requiredtippercentage,
+                            ],
                         );
 
                         await bot.sendMessage(chatId, "Расход успешно добавлен, спасибо");
@@ -206,6 +237,12 @@ export class Expenses {
         });
     }
 
+    /**
+     * Функция позволяет удалить 1 конкретный расход, выбирает пользователь из списка в чате
+     * @param bot
+     * @param msg
+     * @returns
+     */
     async deleteOneExpense(bot: PushkaBot, msg: Message | CallbackQuery) {
         const { chatId, inputData } = bot.getChatIdAndInputData(msg);
 
@@ -227,7 +264,9 @@ export class Expenses {
                 case true:
                     const expenseId = +inputData;
                     if (expenseId && typeof expenseId === "number") {
-                        await bot.db.query("DELETE FROM expenses WHERE expense_id = $1", [expenseId]);
+                        await bot.db.query("DELETE FROM expenses WHERE expense_id = $1", [
+                            expenseId,
+                        ]);
                         await bot.sendMessage(chatId, "Расход успешно удалён");
                     }
 
@@ -263,6 +302,13 @@ export class Expenses {
         });
     }
 
+    /**
+     * Функция ставит долгу статус "расчитан" в базе данных
+     * @param bot
+     * @param chatId
+     * @param id
+     * @returns
+     */
     async resolveExpense(bot: PushkaBot, chatId: number, id: number) {
         try {
             await bot.db.query("UPDATE expenses SET resolve = true WHERE expense_id = $1;", [id]);
@@ -272,6 +318,11 @@ export class Expenses {
         }
     }
 
+    /**
+     * Функция удаляет все расходы из базы данных
+     * @param bot
+     * @param msg
+     */
     async deleteAllExpenses(bot: PushkaBot, msg: Message) {
         const chatId = msg.chat.id;
         try {
@@ -283,6 +334,11 @@ export class Expenses {
         }
     }
 
+    /**
+     * Функция обнуляет все статусы процессов создания или удаления расхода
+     * @param bot
+     * @param chatId
+     */
     deleteStates(bot: PushkaBot, chatId: number) {
         delete this.newExpenseProcess[chatId];
         this.deleteExpenseProcess = false;
