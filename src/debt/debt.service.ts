@@ -1,8 +1,4 @@
-import {
-    CallbackQuery,
-    InlineKeyboardButton,
-    Message,
-} from "node-telegram-bot-api";
+import { CallbackQuery, InlineKeyboardButton, Message } from "node-telegram-bot-api";
 import { PushkaBot } from "../bot/bot.service";
 import { IDebt } from "./debt.interface";
 import { IMember } from "../member/member.interface";
@@ -17,6 +13,8 @@ interface INewDebtProcess {
     debtsAmounts?: number[];
     currentDebtor?: IMember;
     expenseId?: number;
+    tip?: number | null;
+    requiredtippercentage?: number | null;
 }
 
 export class Debts {
@@ -36,37 +34,26 @@ export class Debts {
             await bot.members
                 .getAllFromDb(bot)
                 .then((mems) => {
-                    mems !== null
-                        ? (members = mems)
-                        : new Error("Can't get members");
+                    mems !== null ? (members = mems) : new Error("Can't get members");
                 })
                 .catch((err) => {
                     console.error(err);
                 });
 
-            const debts: IDebt[] = (await bot.db.query("SELECT * FROM debts"))
-                .rows;
+            const debts: IDebt[] = (await bot.db.query("SELECT * FROM debts")).rows;
 
             if (debts.length === 0) {
                 bot.sendMessage(chatId, "Долгов пока нет");
             } else {
                 let message = "Текущие долги:";
                 for (const debt of debts) {
-                    const debtState = debt.resolve
-                        ? "Погашен ✅"
-                        : "Не погашен ⛔️";
+                    const debtState = debt.resolve ? "Погашен ✅" : "Не погашен ⛔️";
 
-                    const whoseDebt = members.find(
-                        (m) => m.member_id === debt.whosedebt,
-                    )?.name;
+                    const whoseDebt = members.find((m) => m.member_id === debt.whosedebt)?.name;
 
-                    const toWhom = members.find(
-                        (m) => m.member_id === debt.towhom,
-                    )?.name;
+                    const toWhom = members.find((m) => m.member_id === debt.towhom)?.name;
 
-                    message +=
-                        "\n" +
-                        `- ${whoseDebt} должен ${toWhom} ${debt.debt}, статус: ${debtState}`;
+                    message += "\n" + `- ${whoseDebt} должен ${toWhom} ${debt.debt}, статус: ${debtState}`;
                 }
                 await bot.sendMessage(chatId, message);
             }
@@ -79,12 +66,9 @@ export class Debts {
         const { chatId } = bot.getChatIdAndInputData(msg);
 
         try {
-            const debts: IDebt[] = (await bot.db.query("SELECT * FROM debts"))
-                .rows;
+            const debts: IDebt[] = (await bot.db.query("SELECT * FROM debts")).rows;
 
-            const members: IMember[] = (
-                await bot.db.query("SELECT * FROM members")
-            ).rows;
+            const members: IMember[] = (await bot.db.query("SELECT * FROM members")).rows;
 
             if (debts.length === 0) {
                 await bot.sendMessage(chatId, "Нет долгов для расчета.");
@@ -110,12 +94,8 @@ export class Debts {
                 for (const creditorId in debtMap[debtorId]) {
                     const amountOwed = debtMap[debtorId][creditorId];
                     if (amountOwed > 0) {
-                        const debtorName = members.find(
-                            (member) => member.member_id === +debtorId,
-                        )?.name;
-                        const creditorName = members.find(
-                            (member) => member.member_id === +creditorId,
-                        )?.name;
+                        const debtorName = members.find((member) => member.member_id === +debtorId)?.name;
+                        const creditorName = members.find((member) => member.member_id === +creditorId)?.name;
 
                         message += `- ${debtorName} должен ${creditorName} ${amountOwed}\n`;
                     } else {
@@ -155,10 +135,7 @@ export class Debts {
         const debtors = await bot.members.getAllFromDb(bot);
 
         if (!expenses || expenses.length === 0) {
-            await bot.sendMessage(
-                chatId,
-                "Пока что нечего расчитывать, сначала создайте расход",
-            );
+            await bot.sendMessage(chatId, "Пока что нечего расчитывать, сначала создайте расход");
             return;
         }
 
@@ -171,15 +148,10 @@ export class Debts {
             switch (process.step) {
                 case 1:
                     const expenseId = Number(inputData);
-                    const selectedExpense = expenses.find(
-                        (expense) => expense.expense_id === expenseId,
-                    )!;
+                    const selectedExpense = expenses.find((expense) => expense.expense_id === expenseId)!;
 
                     if (!selectedExpense) {
-                        await bot.sendMessage(
-                            chatId,
-                            "Выбранный расход не найден.",
-                        );
+                        await bot.sendMessage(chatId, "Выбранный расход не найден.");
                         return;
                     }
 
@@ -187,61 +159,53 @@ export class Debts {
                     process.expenseId = selectedExpense.expense_id;
                     process.towhom = selectedExpense.whopaid;
                     process.debtorsIds = [...selectedExpense.whoparticipated];
-                    process.debtorsIdsForDB = [
-                        ...selectedExpense.whoparticipated,
-                    ];
+                    process.debtorsIdsForDB = [...selectedExpense.whoparticipated];
+                    process.tip = selectedExpense.tip;
+                    process.requiredtippercentage = selectedExpense.requiredtippercentage;
+
                     process.step = 2;
 
                     await this.promptNextDebtor(bot, chatId, process, debtors);
                     break;
 
                 case 2:
-                    const amount = Number(inputData);
+                    let amount = Number(inputData);
                     if (isNaN(amount) || amount <= 0) {
-                        await bot.sendMessage(
-                            chatId,
-                            "Введите корректную сумму",
-                        );
+                        await bot.sendMessage(chatId, "Введите корректную сумму");
                         return;
                     }
 
                     if (amount > process.amount) {
-                        await bot.sendMessage(
-                            chatId,
-                            "Долг не может быть больше расхода, повторите ввод, пожалуйста",
-                        );
+                        await bot.sendMessage(chatId, "Долг не может быть больше расхода, повторите ввод, пожалуйста");
                         return;
                     }
 
-                    process.debtsAmounts!.push(amount);
+                    let actualDebt = amount;
+
+                    if (process.requiredtippercentage !== null) {
+                        const tipMultiplier = process.requiredtippercentage! / 100 + 1;
+                        actualDebt = Math.round(actualDebt * tipMultiplier);
+                    }
+
+                    if (process.tip !== null) {
+                        const tipPart = Math.round(process.tip! / (process.debtorsIdsForDB!.length + 1));
+                        actualDebt += tipPart;
+                    }
+
+                    process.debtsAmounts!.push(Math.round(actualDebt));
 
                     if (process.debtorsIds.length > 0) {
-                        await this.promptNextDebtor(
-                            bot,
-                            chatId,
-                            process,
-                            debtors,
-                        );
+                        await this.promptNextDebtor(bot, chatId, process, debtors);
                     } else {
                         await this.saveDebts(bot, process);
-                        await bot.sendMessage(
-                            chatId,
-                            "Долги успешно сохранены!",
-                        );
-                        await bot.expenses.resolveExpense(
-                            bot,
-                            chatId,
-                            process.expenseId!,
-                        );
+                        await bot.sendMessage(chatId, "Долги успешно сохранены!");
+                        await bot.expenses.resolveExpense(bot, chatId, process.expenseId!);
                         this.deleteStates(bot, chatId);
                     }
                     break;
 
                 default:
-                    await bot.sendMessage(
-                        chatId,
-                        "Произошла ошибка составления долга, попробуйте ещё раз",
-                    );
+                    await bot.sendMessage(chatId, "Произошла ошибка составления долга, попробуйте ещё раз");
                     this.deleteStates(bot, chatId);
                     break;
             }
@@ -266,33 +230,19 @@ export class Debts {
             callback_data: "cancel",
         });
 
-        await bot.sendMessage(
-            chatId,
-            "Выберите, какой расход сейчас посчитаем:",
-            {
-                reply_markup: {
-                    inline_keyboard: [...options.map((button) => [button])],
-                },
+        await bot.sendMessage(chatId, "Выберите, какой расход сейчас посчитаем:", {
+            reply_markup: {
+                inline_keyboard: [...options.map((button) => [button])],
             },
-        );
+        });
     }
 
-    private async promptNextDebtor(
-        bot: PushkaBot,
-        charId: number,
-        process: INewDebtProcess,
-        debtors: IMember[],
-    ) {
+    private async promptNextDebtor(bot: PushkaBot, charId: number, process: INewDebtProcess, debtors: IMember[]) {
         const currentDebtorId = process.debtorsIds.pop();
-        process.currentDebtor = debtors.find(
-            (debtor) => debtor.member_id === currentDebtorId,
-        );
+        process.currentDebtor = debtors.find((debtor) => debtor.member_id === currentDebtorId);
 
         if (process.currentDebtor) {
-            await bot.sendMessage(
-                charId,
-                `Сколько наел(а) ${process.currentDebtor.name}?`,
-            );
+            await bot.sendMessage(charId, `Сколько наел(а) ${process.currentDebtor.name}?`);
         }
     }
 
@@ -326,36 +276,28 @@ export class Debts {
             return;
         }
 
-        const debts: IDebt[] = (await bot.db.query("SELECT * FROM debts;"))
-            .rows;
+        const debts: IDebt[] = (await bot.db.query("SELECT * FROM debts;")).rows;
 
         if (debts.length === 0) {
             await bot.sendMessage(chatId, "Нечего удалять");
             return;
         }
 
-        const members: IMember[] = (await bot.db.query("SELECT * FROM members"))
-            .rows;
+        const members: IMember[] = (await bot.db.query("SELECT * FROM members")).rows;
 
         if (process) {
             switch (process) {
                 case true:
                     const debt_id = +inputData;
                     if (debt_id && typeof debt_id === "number") {
-                        await bot.db.query(
-                            "DELETE FROM debts WHERE debt_id = $1",
-                            [debt_id],
-                        );
+                        await bot.db.query("DELETE FROM debts WHERE debt_id = $1", [debt_id]);
                         await bot.sendMessage(chatId, "Долг успешно удалён");
                     }
 
                     this.deleteStates(bot, chatId);
                     break;
                 default:
-                    await bot.sendMessage(
-                        chatId,
-                        "Ошибка удаления долга, попробуйте ещё раз",
-                    );
+                    await bot.sendMessage(chatId, "Ошибка удаления долга, попробуйте ещё раз");
 
                     this.deleteStates(bot, chatId);
                     break;
@@ -367,12 +309,7 @@ export class Debts {
         bot.process = false;
 
         const options: InlineKeyboardButton[] = debts.map((debt) => ({
-            text: `Долг ${debt.debt} ${
-                members.find((member) => member.member_id === debt.whosedebt)
-                    ?.name
-            } для ${
-                members.find((member) => member.member_id === debt.towhom)?.name
-            }`,
+            text: `Долг ${debt.debt} ${members.find((member) => member.member_id === debt.whosedebt)?.name} для ${members.find((member) => member.member_id === debt.towhom)?.name}`,
             callback_data: `${debt.debt_id}`,
         }));
 
@@ -387,9 +324,7 @@ export class Debts {
         const { chatId } = bot.getChatIdAndInputData(msg);
         try {
             await bot.db.query("DELETE FROM debts");
-            await bot.db.query(
-                "ALTER SEQUENCE debts_debt_id_seq RESTART WITH 1;",
-            );
+            await bot.db.query("ALTER SEQUENCE debts_debt_id_seq RESTART WITH 1;");
             await bot.sendMessage(chatId, "Все долги успешно удалены");
         } catch (err) {
             await bot.sendMessage(chatId, "Ошибка удаления долгов");

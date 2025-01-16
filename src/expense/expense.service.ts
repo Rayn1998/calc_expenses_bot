@@ -137,8 +137,13 @@ export class Expenses {
                     break;
 
                 case 5:
-                    // обработать вариант, если не оставляли на чай. Сделать слушатель callback_query для этого варианта
                     const tip = Number(inputData);
+                    if (inputData === "no_tips") {
+                        process.expense.tip = null;
+                        process.step = 6;
+                        await bot.sendMessage(chatId, "Какой процент за обслуживание");
+                        break;
+                    }
                     if (tip && typeof tip === "number") {
                         process.expense.tip = tip;
                     } else {
@@ -147,38 +152,13 @@ export class Expenses {
                     }
 
                     process.step = 6;
-
-                    const whoLeftTheTipOptions: InlineKeyboardButton[] = members.map((m) => ({
-                        text: m.name,
-                        callback_data: `${m.member_id}`,
-                    }));
-
-                    await bot.sendMessage(chatId, "Кто оставил на чай?", {
-                        reply_markup: {
-                            inline_keyboard: [whoLeftTheTipOptions],
-                        },
-                    });
-                    break;
-
-                case 6:
-                    const tipParticipantId = Number(inputData);
-                    let tipParticipant;
-                    if (tipParticipantId && typeof tipParticipantId === "number") {
-                        process.expense.whoPaidTheTip = tipParticipant;
-                    } else {
-                        await bot.sendMessage(chatId, "Пожалуйста, введите число");
-                        return;
-                    }
-
-                    process.step = 7;
-
                     await bot.sendMessage(chatId, "Какой процент за обслуживание");
                     break;
 
-                case 7:
+                case 6:
                     const requiredTipPercentage = Number(inputData);
-                    if (requiredTipPercentage && typeof requiredTipPercentage === "number") {
-                        process.expense.requiredTipPercentage = requiredTipPercentage;
+                    if (requiredTipPercentage + 1 > 0 && typeof requiredTipPercentage === "number") {
+                        process.expense.requiredtippercentage = requiredTipPercentage;
                     } else {
                         await bot.sendMessage(chatId, "Пожалуйста, введите число");
                         return;
@@ -186,15 +166,15 @@ export class Expenses {
 
                     try {
                         await bot.db.query(
-                            `INSERT INTO expenses(amount, description, date, whopaid, whoparticipated, resolve, )
+                            `INSERT INTO expenses(amount, description, date, whopaid, whoparticipated, resolve, tip, requiredtippercentage)
                             VALUES
-                            ($1, $2, $3, $4, $5, false);`,
-                            [process.expense.amount, process.expense.description, new Date().toDateString(), process.expense.whopaid, process.expense.whoparticipated],
+                            ($1, $2, $3, $4, $5, false, $6, $7);`,
+                            [process.expense.amount, process.expense.description, new Date().toDateString(), process.expense.whopaid, process.expense.whoparticipated, process.expense.tip, process.expense.requiredtippercentage],
                         );
 
                         await bot.sendMessage(chatId, "Расход успешно добавлен, спасибо");
                     } catch (err) {
-                        await bot.sendMessage(chatId, "Ошибка создания расхода d БД");
+                        await bot.sendMessage(chatId, "Ошибка создания расхода в БД");
                         return;
                     }
 

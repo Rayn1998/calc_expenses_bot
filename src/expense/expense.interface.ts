@@ -6,7 +6,6 @@ export interface IExpense {
     whopaid: number;
     whoparticipated: number[];
     resolve: boolean;
-    tip: number;
-    whoPaidTheTip: number;
-    requiredTipPercentage: number;
+    tip: number | null;
+    requiredtippercentage: number | null;
 }
