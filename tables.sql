@@ -15,7 +15,7 @@ CREATE TABLE expenses (
     whopaid INT NOT NULL REFERENCES members(member_id),
     whoparticipated INT[] NOT NULL,
     resolve BOOLEAN NOT NULL,
-    tip INT NOT NULL,
+    tip INT,
     requiredtippercentage INT NOT NULL
 );
 

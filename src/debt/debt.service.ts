@@ -366,7 +366,7 @@ export default class Debts {
         }
 
         this.deleteDebtProcess = true;
-        bot.process = false;
+        bot.process = true;
 
         const options: InlineKeyboardButton[] = debts.map((debt) => ({
             text: `Долг ${debt.debt} ${members.find((member) => member.member_id === debt.whosedebt)?.name} для ${members.find((member) => member.member_id === debt.towhom)?.name}`,

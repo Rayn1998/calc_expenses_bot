@@ -206,6 +206,7 @@ export default class Expenses {
                         await bot.sendMessage(chatId, "Расход успешно добавлен, спасибо");
                     } catch (err) {
                         await bot.sendMessage(chatId, "Ошибка создания расхода в БД");
+                        this.deleteStates(bot, chatId);
                         return;
                     }
 
