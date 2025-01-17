@@ -5,7 +5,8 @@
     "scripts": {
         "start": "node ./dist/main.js",
         "build": "tsc",
-        "test": "npx jest"
+        "test": "npx jest",
+        "init-db": "ts-node ./init/initDb.ts"
     },
     "author": "Yuriy Bodolanov",
     "license": "ISC",
