@@ -12,7 +12,7 @@ CREATE TABLE expenses (
     amount INT NOT NULL,
     description VARCHAR(100) NOT NULL,
     date DATE NOT NULL,
-    whopaid INT NOT NULL REFERENCES members(member_id),
+    whopaid INT NOT NULL REFERENCES members(member_id) ON DELETE CASCADE,
     whoparticipated INT[] NOT NULL,
     resolve BOOLEAN NOT NULL,
     tip INT,
@@ -22,8 +22,8 @@ CREATE TABLE expenses (
 CREATE TABLE debts (
     debt_id SERIAL PRIMARY KEY,
     debt INT NOT NULL,
-    towhom INT NOT NULL REFERENCES members(member_id),
+    towhom INT NOT NULL REFERENCES members(member_id) ON DELETE CASCADE,
     resolve BOOLEAN,
-    whosedebt INT NOT NULL REFERENCES members(member_id),
-    fromexpense INT NOT NULL REFERENCES expenses(expense_id)
+    whosedebt INT NOT NULL REFERENCES members(member_id) ON DELETE CASCADE,
+    fromexpense INT NOT NULL REFERENCES expenses(expense_id) ON DELETE CASCADE
 );

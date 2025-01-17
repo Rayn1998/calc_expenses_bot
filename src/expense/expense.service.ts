@@ -44,9 +44,7 @@ export default class Expenses {
      */
     async getAllUnresolvedExpenses(bot: PushkaBot): Promise<IExpense[] | null> {
         try {
-            const expenses: IExpense[] = (
-                await bot.db.query("SELECT * FROM expenses WHERE resolve = false")
-            ).rows;
+            const expenses: IExpense[] = (await bot.db.query("SELECT * FROM expenses WHERE resolve = false")).rows;
             if (expenses.length !== 0) {
                 return expenses;
             } else {
@@ -66,11 +64,21 @@ export default class Expenses {
     async createExpense(bot: PushkaBot, msg: Message | CallbackQuery) {
         const { chatId, inputData } = bot.getChatIdAndInputData(msg);
 
-        const process = this.newExpenseProcess[chatId];
-
         if (await bot.checkInSomeProcess(msg)) {
             return;
         }
+
+        const members = await bot.members.getAllFromDb(bot);
+
+        if (members === null) {
+            await bot.sendMessage(
+                chatId,
+                "Пока что не для кого составлять расходы). Пожалуйста, создайте сначала участников",
+            );
+            return;
+        }
+
+        const process = this.newExpenseProcess[chatId];
 
         if (process) {
             const members = await bot.members.getAllFromDb(bot);
@@ -177,10 +185,7 @@ export default class Expenses {
 
                 case 6:
                     const requiredTipPercentage = Number(inputData);
-                    if (
-                        requiredTipPercentage + 1 > 0 &&
-                        typeof requiredTipPercentage === "number"
-                    ) {
+                    if (requiredTipPercentage + 1 > 0 && typeof requiredTipPercentage === "number") {
                         process.expense.requiredtippercentage = requiredTipPercentage;
                     } else {
                         await bot.sendMessage(chatId, "Пожалуйста, введите число");
@@ -265,9 +270,7 @@ export default class Expenses {
                 case true:
                     const expenseId = +inputData;
                     if (expenseId && typeof expenseId === "number") {
-                        await bot.db.query("DELETE FROM expenses WHERE expense_id = $1", [
-                            expenseId,
-                        ]);
+                        await bot.db.query("DELETE FROM expenses WHERE expense_id = $1", [expenseId]);
                         await bot.sendMessage(chatId, "Расход успешно удалён");
                     }
 
