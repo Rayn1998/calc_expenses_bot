@@ -24,6 +24,7 @@ describe("PushkaBot Class", () => {
         bot.sendMessage = mock.fn((chatId: number, message: string, options?: any) => {
             return Promise.resolve();
         });
+        mockDb.connect = mock.fn(async () => Promise.reject());
     });
 
     it("PushkaBot takes chatId and inputData correctly", () => {
@@ -31,6 +32,15 @@ describe("PushkaBot Class", () => {
 
         assert.strictEqual(chatId, 123);
         assert.strictEqual(inputData, "test_text");
+
+        bot.getChatIdAndInputData = mock.fn(() => ({ chatId: 456, inputData: "test_query" }));
+
+        const callback_query = {} as unknown as TelegramBot.CallbackQuery;
+
+        const { chatId: chatId2, inputData: inputData2 } = bot.getChatIdAndInputData(callback_query);
+
+        assert.strictEqual(chatId2, 456);
+        assert.strictEqual(inputData2, "test_query");
     });
 
     it("Testing the checkInSomeProcess method", async () => {
@@ -46,5 +56,10 @@ describe("PushkaBot Class", () => {
 
         const badRes = await bot.checkInSomeProcess(msg);
         assert.strictEqual(false, badRes);
+    });
+
+    it("Testing the data base connection", async () => {
+        const dbConnection = await bot.connectToDb();
+        assert.strictEqual(false, dbConnection);
     });
 });
