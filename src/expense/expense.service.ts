@@ -29,9 +29,7 @@ export default class Expenses {
             let message = "Текущие расходы:";
             for (const expense of expenses) {
                 const expenseState = expense.resolve ? "Расчитан ✅" : "Не расчитан ⛔️";
-                message +=
-                    "\n" +
-                    `- ${expense.description}, ${expense.amount}, ${expense.date.toDateString()}, ${expenseState}`;
+                message += "\n" + `- ${expense.description}, ${expense.amount}, ${expense.date.toDateString()}, ${expenseState}`;
             }
             await bot.sendMessage(chatId, message);
         }
@@ -71,10 +69,7 @@ export default class Expenses {
         const members = await bot.members.getAllFromDb(bot);
 
         if (members === null) {
-            await bot.sendMessage(
-                chatId,
-                "Пока что не для кого составлять расходы). Пожалуйста, создайте сначала участников",
-            );
+            await bot.sendMessage(chatId, "Пока что не для кого составлять расходы). Пожалуйста, создайте сначала участников");
             return;
         }
 

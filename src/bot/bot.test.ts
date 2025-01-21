@@ -4,36 +4,47 @@ import Expenses from "../expense/expense.service";
 import Debts from "../debt/debt.service";
 import { Pool } from "pg";
 import TelegramBot from "node-telegram-bot-api";
+import { describe, it, mock, before } from "node:test";
+import assert from "node:assert";
+
+const mockTelegramBot = mock.module("node-telegram-bot-api") as unknown as TelegramBot;
+const mockDb = mock.module("pg") as unknown as Pool;
+const mockMembers = mock.module("../member/member.service") as unknown as Members;
+const mockExpenses = mock.module("../expense/expense.service") as unknown as Expenses;
+const mockDebts = mock.module("../debt/debt.service") as unknown as Debts;
 
 describe("PushkaBot Class", () => {
-    test("PushkaBot should initialize correctly", () => {
-        const botMock = jest.fn() as unknown as TelegramBot;
-        const dbMock = jest.fn() as unknown as Pool;
-        const membersMock = jest.fn() as unknown as Members;
-        const expensesMock = jest.fn() as unknown as Expenses;
-        const debtsMock = jest.fn() as unknown as Debts;
+    let bot: PushkaBot;
+    const msg = { chat: { id: 123 }, text: "test_text" } as unknown as TelegramBot.Message;
 
-        const pushkaBot = new PushkaBot(botMock, dbMock, membersMock, expensesMock, debtsMock);
-
-        expect(pushkaBot.bot).toBe(botMock);
-        expect(pushkaBot.db).toBe(dbMock);
-        expect(pushkaBot.members).toBe(membersMock);
-        expect(pushkaBot.expenses).toBe(expensesMock);
-        expect(pushkaBot.debts).toBe(debtsMock);
+    before(() => {
+        bot = new PushkaBot(mockTelegramBot, mockDb, mockMembers, mockExpenses, mockDebts);
+        bot.checkCommands = mock.fn(() => true);
+        bot.checkAddCommands = mock.fn(() => true);
+        bot.sendMessage = mock.fn((chatId: number, message: string, options?: any) => {
+            return Promise.resolve();
+        });
     });
 
-    // test("Check if connecting to data base", async () => {
-    //     const mockDbConnection = jest.spyOn(pushkaBot, "connectToDb").mockResolvedValue(true);
+    it("PushkaBot takes chatId and inputData correctly", () => {
+        const { chatId, inputData } = bot.getChatIdAndInputData(msg);
 
-    //     const result = await pushkaBot.connectToDb();
+        assert.strictEqual(chatId, 123);
+        assert.strictEqual(inputData, "test_text");
+    });
 
-    //     expect(mockDbConnection).toHaveBeenCalled();
-    //     expect(result).toBeTruthy();
-    // });
+    it("Testing the checkInSomeProcess method", async () => {
+        bot.process = true;
+        bot.getChatIdAndInputData = mock.fn(() => ({
+            chatId: 123,
+            inputData: "test",
+        }));
+        const res = await bot.checkInSomeProcess(msg);
+        assert.ok(res);
 
-    // test("Should throw an error if database connection fails", async () => {
-    //     jest.spyOn(bot, "connectToDb").mockRejectedValue(new Error("Connection failed"));
+        bot.process = false;
 
-    //     await expect(bot.connectToDb()).rejects.toThrow("Connection failed");
-    // });
+        const badRes = await bot.checkInSomeProcess(msg);
+        assert.strictEqual(false, badRes);
+    });
 });

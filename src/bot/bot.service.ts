@@ -5,7 +5,7 @@ import Members from "../member/member.service";
 import Expenses from "../expense/expense.service";
 import { Pool } from "pg";
 import Debts from "../debt/debt.service";
-import { isCallbackQuery, isMessage } from "../ts/typeguards";
+import { isCallbackQuery, isMessage } from "../typeguards/typeguards";
 
 /**
  * @class Класс бота для произведения расчётов
@@ -18,13 +18,7 @@ export default class PushkaBot implements IBot {
     debts: Debts;
     db: Pool;
 
-    constructor(
-        botInstance: TelegramBot,
-        dbInstance: Pool,
-        membersService: Members,
-        expensesService: Expenses,
-        debtService: Debts,
-    ) {
+    constructor(botInstance: TelegramBot, dbInstance: Pool, membersService: Members, expensesService: Expenses, debtService: Debts) {
         this.db = dbInstance;
         this.bot = botInstance;
         this.members = membersService;

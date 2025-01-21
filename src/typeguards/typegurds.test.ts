@@ -1,3 +1,5 @@
+import assert from "node:assert";
+import test from "node:test";
 import { isMessage, isCallbackQuery } from "./typeguards";
 
 test("Check that msg is Message type", () => {
@@ -5,7 +7,7 @@ test("Check that msg is Message type", () => {
         text: "InputMessage",
         chat: {},
     };
-    expect(isMessage(inputMessage)).toBeTruthy();
+    assert.ok(isMessage(inputMessage));
 });
 
 test("Check that msg is CallbackQuery type", () => {
@@ -13,5 +15,5 @@ test("Check that msg is CallbackQuery type", () => {
         data: "InputMessage",
         id: 1,
     };
-    expect(isCallbackQuery(inputMessage)).toBeTruthy();
+    assert.ok(isCallbackQuery(inputMessage));
 });
